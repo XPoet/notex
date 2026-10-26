@@ -28,6 +28,7 @@ const props = defineProps<{
   categories: CategoryNode[]
   tags: TagSummary[]
   selectedTagIds: string[]
+  searchQuery?: string
 }>()
 
 const emit = defineEmits<{
@@ -48,6 +49,7 @@ const noteId = computed(() => props.note?.id)
 const noteCategoryPath = computed(
   () => findCategoryPath(props.categories, props.note?.categoryId) ?? '未分类',
 )
+const noteTags = computed(() => props.tags.filter((tag) => props.selectedTagIds.includes(tag.id)))
 const timestampFormatter = new Intl.DateTimeFormat('zh-CN', {
   year: 'numeric',
   month: '2-digit',
@@ -113,10 +115,17 @@ defineExpose({ focusEditor })
           @update:model-value="updateTitle"
         />
         <div class="note-editor-toolbar">
-          <p class="note-editor-location" :title="noteCategoryPath">
-            <el-icon aria-hidden="true"><Folder /></el-icon>
-            <span>{{ noteCategoryPath }}</span>
-          </p>
+          <div class="note-editor-classification">
+            <p class="note-editor-location" :title="noteCategoryPath">
+              <el-icon aria-hidden="true"><Folder /></el-icon>
+              <span>{{ noteCategoryPath }}</span>
+            </p>
+            <div v-if="noteTags.length > 0" class="note-editor-tags" aria-label="笔记标签">
+              <span v-for="tag in noteTags" :key="tag.id" class="note-editor-tag" :title="tag.name">
+                #{{ tag.name }}
+              </span>
+            </div>
+          </div>
           <p class="note-editor-time note-editor-created">
             <el-icon aria-hidden="true"><Calendar /></el-icon>
             <span>创建于</span>
@@ -186,6 +195,7 @@ defineExpose({ focusEditor })
           class="note-editor-markdown"
           :model-value="note.content"
           :save-image="saveImage"
+          :search-query="searchQuery"
           @update:model-value="updateContent"
           @paste-error="emit('pasteError', $event)"
         />
@@ -213,10 +223,21 @@ defineExpose({ focusEditor })
   block-size: 100%;
 }
 
+.note-editor-classification {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  min-inline-size: 0;
+  max-inline-size: min(100%, 480px);
+}
+
 .note-editor-location {
   display: flex;
   align-items: center;
+  flex: 0 1 auto;
   gap: 6px;
+  min-inline-size: 0;
+  max-inline-size: 240px;
   margin: 0;
   color: var(--color-text-secondary);
   font-size: 0.6875rem;
@@ -230,6 +251,25 @@ defineExpose({ focusEditor })
 
 .note-editor-location span {
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-editor-tags {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-inline-size: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.note-editor-tag {
+  flex: 0 0 auto;
+  max-inline-size: 180px;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--color-accent) 70%, var(--color-text-primary));
+  font-size: 0.6875rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

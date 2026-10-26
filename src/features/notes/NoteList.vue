@@ -11,12 +11,14 @@ const props = defineProps<{
   selectedId?: string
   loading: boolean
   error?: string
+  searchQuery?: string
 }>()
 
 const emit = defineEmits<{
   create: []
   retry: []
   select: [id: string]
+  search: [query: string]
 }>()
 
 const query = shallowRef('')
@@ -78,7 +80,13 @@ onBeforeUnmount(() => {
         <h1 class="note-list-title">{{ noteListTitle }}</h1>
         <span class="note-list-count">{{ notes.length }}</span>
       </div>
-      <el-input v-model="query" class="note-list-search" placeholder="搜索笔记">
+      <el-input
+        v-model="query"
+        class="note-list-search"
+        placeholder="搜索笔记"
+        clearable
+        @update:model-value="emit('search', $event)"
+      >
         <template #prefix>
           <el-icon><Search /></el-icon>
         </template>
@@ -111,6 +119,7 @@ onBeforeUnmount(() => {
             :key="note.id"
             :note="note"
             :selected="note.id === selectedId"
+            :search-query="searchQuery ?? query"
             @select="emit('select', $event)"
           />
         </div>

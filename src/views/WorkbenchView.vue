@@ -27,6 +27,10 @@ const router = useRouter()
 const { error, isLoading, notes, saveStatus, selectedNote } = storeToRefs(notesStore)
 const missingAssetCount = shallowRef(0)
 const selectedTagIds = shallowRef<string[]>([])
+const listSearchQuery = shallowRef<string>()
+const searchQuery = computed(
+  () => listSearchQuery.value ?? (typeof route.query.search === 'string' ? route.query.search : ''),
+)
 const imageError = shallowRef<string>()
 const isExportDialogVisible = shallowRef(false)
 const isMovingNote = shallowRef(false)
@@ -134,14 +138,19 @@ watch(
 watch(
   () => selectedNote.value?.id,
   async (noteId) => {
+    selectedTagIds.value = []
     if (noteId === undefined) {
-      selectedTagIds.value = []
       return
     }
     try {
-      selectedTagIds.value = (await listNoteTags(noteId)).map((tag) => tag.id)
+      const tags = await listNoteTags(noteId)
+      if (selectedNote.value?.id === noteId) {
+        selectedTagIds.value = tags.map((tag) => tag.id)
+      }
     } catch {
-      selectedTagIds.value = []
+      if (selectedNote.value?.id === noteId) {
+        selectedTagIds.value = []
+      }
     }
   },
   { immediate: true },
@@ -353,11 +362,13 @@ onBeforeUnmount(() => {
         :notes="notes"
         :category-name="activeCategoryName"
         :selected-id="selectedNote?.id"
+        :search-query="searchQuery"
         :loading="isLoading"
         :error="error?.message"
         @create="handleCreate"
         @retry="handleLoad"
         @select="handleSelect"
+        @search="listSearchQuery = $event"
       />
     </template>
 
@@ -372,6 +383,7 @@ onBeforeUnmount(() => {
         :categories="categoriesStore.categories"
         :tags="tagsStore.tags"
         :selected-tag-ids="selectedTagIds"
+        :search-query="searchQuery"
         @update="updateNote"
         @update-category="handleUpdateCategory"
         @update-tags="handleUpdateTags"

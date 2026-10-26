@@ -1,16 +1,18 @@
 <script setup lang="ts">
-import { EditorState } from '@codemirror/state'
+import { Compartment, EditorState } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef, watch } from 'vue'
 import { useClipboardPaste } from './useClipboardPaste'
 import NoteImageViewer from './NoteImageViewer.vue'
 import { imagePreviews, refreshImagePreviews } from './imagePreviews'
+import { searchHighlights } from './searchHighlights'
 import { useNoteImages } from '@/composables/useNoteImages'
 
 const props = defineProps<{
   modelValue: string
   noteId: string
   saveImage: (bytes: Uint8Array) => Promise<string>
+  searchQuery?: string
 }>()
 
 const emit = defineEmits<{
@@ -21,6 +23,7 @@ const emit = defineEmits<{
 const editorHost = useTemplateRef<HTMLDivElement>('editorHost')
 const editorView = shallowRef<EditorView>()
 const editorContent = ref(props.modelValue)
+const searchHighlightCompartment = new Compartment()
 const { images } = useNoteImages(
   () => props.noteId,
   () => editorContent.value,
@@ -127,6 +130,7 @@ onMounted(() => {
       doc: props.modelValue,
       extensions: [
         EditorView.lineWrapping,
+        searchHighlightCompartment.of(searchHighlights(props.searchQuery ?? '')),
         imagePreviews(
           () => images.value,
           (path) => {
@@ -186,6 +190,15 @@ watch(
     synchronizing = true
     view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value } })
     synchronizing = false
+  },
+)
+
+watch(
+  () => props.searchQuery,
+  (value) => {
+    editorView.value?.dispatch({
+      effects: searchHighlightCompartment.reconfigure(searchHighlights(value ?? '')),
+    })
   },
 )
 
@@ -269,6 +282,13 @@ onBeforeUnmount(() => {
 
 .markdown-editor :deep(.cm-focused) {
   outline: none;
+}
+
+.markdown-editor :deep(.cm-search-match) {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--color-accent) 35%, var(--color-canvas));
+  color: var(--color-text-primary);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--color-accent) 65%, transparent);
 }
 
 .markdown-editor :deep(.cm-image-preview) {

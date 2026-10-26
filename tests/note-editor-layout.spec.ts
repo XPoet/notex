@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { shallowMount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import NoteEditor from '@/features/editor/NoteEditor.vue'
+import MarkdownEditor from '@/features/editor/MarkdownEditor.vue'
 
 const noteEditorPath = resolve(process.cwd(), 'src/features/editor/NoteEditor.vue')
 const noteEditorSource = readFileSync(noteEditorPath, 'utf8')
@@ -10,6 +11,50 @@ const markdownEditorPath = resolve(process.cwd(), 'src/features/editor/MarkdownE
 const markdownEditorSource = readFileSync(markdownEditorPath, 'utf8')
 
 describe('笔记编辑器布局', () => {
+  it('分类旁只展示当前笔记的标签，修改标签或切换笔记后同步更新', async () => {
+    const note = {
+      id: 'note-1',
+      title: '标签展示',
+      content: '正文',
+      isPinned: false,
+      createdAt: '2026-10-26T00:00:00Z',
+      updatedAt: '2026-10-26T00:00:00Z',
+    }
+    const wrapper = shallowMount(NoteEditor, {
+      props: {
+        note,
+        saveStatus: 'saved',
+        missingAssetCount: 0,
+        saveImage: async () => '',
+        categories: [],
+        tags: [
+          { id: 'learning', name: '学习资料', noteCount: 1 },
+          { id: 'work', name: '工作', noteCount: 1 },
+        ],
+        selectedTagIds: ['learning'],
+        searchQuery: '正文',
+      },
+    })
+
+    const classification = wrapper.get('.note-editor-classification')
+    expect(classification.get('.note-editor-location').text()).toBe('未分类')
+    expect(classification.findAll('.note-editor-tag').map((tag) => tag.text())).toEqual([
+      '#学习资料',
+    ])
+    expect(wrapper.getComponent(MarkdownEditor).props('searchQuery')).toBe('正文')
+
+    await wrapper.setProps({ selectedTagIds: ['learning', 'work'] })
+    expect(classification.findAll('.note-editor-tag').map((tag) => tag.text())).toEqual([
+      '#学习资料',
+      '#工作',
+    ])
+    await wrapper.setProps({ selectedTagIds: ['work'] })
+    expect(classification.get('.note-editor-tag').text()).toBe('#工作')
+    await wrapper.setProps({ note: { ...note, id: 'note-2' }, selectedTagIds: [] })
+    expect(wrapper.find('.note-editor-tags').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('在标题下展示创建和更新时间，并在保存后同步更新时间，午夜显示为 00 点', async () => {
     const createdAt = new Date(2026, 9, 16, 0, 1, 2).toISOString()
     const updatedAt = new Date(2026, 9, 17, 23, 59, 58).toISOString()
