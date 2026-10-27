@@ -18,7 +18,7 @@ pub struct TrashService {
 impl TrashService {
     pub fn new(data_directory: &Path) -> Self {
         Self {
-            database_path: data_directory.join("database").join("memobox.db"),
+            database_path: data_directory.join("database").join("notex.db"),
             data_directory: data_directory.to_path_buf(),
         }
     }
@@ -97,7 +97,7 @@ mod tests {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |value| value.as_nanos());
-        let directory = std::env::temp_dir().join(format!("memo-box-trash-{timestamp}"));
+        let directory = std::env::temp_dir().join(format!("notex-trash-{timestamp}"));
         let _ = std::fs::create_dir_all(directory.join("database"));
         directory
     }
@@ -105,7 +105,7 @@ mod tests {
     #[test]
     fn trashes_restores_and_permanently_deletes_a_note() -> Result<(), Box<dyn std::error::Error>> {
         let directory = data_directory();
-        BootstrapRepository::initialize(&directory.join("database").join("memobox.db"))?;
+        BootstrapRepository::initialize(&directory.join("database").join("notex.db"))?;
         let notes = NotesService::new(&directory);
         let note = notes.create()?;
         notes.save(&note.id, "标题", "正文")?;
@@ -127,7 +127,7 @@ mod tests {
     fn keeps_shared_asset_until_its_last_note_is_permanently_deleted()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = data_directory();
-        BootstrapRepository::initialize(&directory.join("database").join("memobox.db"))?;
+        BootstrapRepository::initialize(&directory.join("database").join("notex.db"))?;
         let notes = NotesService::new(&directory);
         let first = notes.create()?;
         let second = notes.create()?;

@@ -28,7 +28,7 @@ const snapshot = {
   noteSort: 'updatedAt' as const,
   editorFontSize: 15 as const,
   showCategoryCounts: true,
-  dataDirectory: '/Users/example/Library/Application Support/cn.xpoet.memobox',
+  dataDirectory: '/Users/example/Library/Application Support/cn.xpoet.notex',
   defaultExportDirectory: '/Users/example/Desktop',
   hasCustomDefaultExportDirectory: false,
   appVersion: '0.1.0',

@@ -332,10 +332,9 @@ mod tests {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |value| value.as_nanos());
-        let directory =
-            std::env::temp_dir().join(format!("memo-box-export-repository-{timestamp}"));
+        let directory = std::env::temp_dir().join(format!("notex-export-repository-{timestamp}"));
         fs::create_dir_all(&directory)?;
-        let database_path = directory.join("memobox.db");
+        let database_path = directory.join("notex.db");
         BootstrapRepository::initialize(&database_path)?;
         let mut connection = open_database(&database_path)?;
         connection.execute(
@@ -382,9 +381,9 @@ mod tests {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |value| value.as_nanos());
-        let directory = std::env::temp_dir().join(format!("memo-box-export-scopes-{timestamp}"));
+        let directory = std::env::temp_dir().join(format!("notex-export-scopes-{timestamp}"));
         fs::create_dir_all(&directory)?;
-        let database_path = directory.join("memobox.db");
+        let database_path = directory.join("notex.db");
         BootstrapRepository::initialize(&database_path)?;
         let mut connection = open_database(&database_path)?;
         connection.execute("INSERT INTO categories (id, name, parent_id, level, sort_order, created_at, updated_at) VALUES ('root', '工作', NULL, 1, 0, '2026-07-24T00:00:00Z', '2026-07-24T00:00:00Z'), ('child', '项目', 'root', 2, 0, '2026-07-24T00:00:00Z', '2026-07-24T00:00:00Z')", [])?;

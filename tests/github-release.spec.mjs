@@ -24,7 +24,7 @@ const versionPaths = [
 ]
 
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), 'memo-box-github-release-'))
+  const root = mkdtempSync(join(tmpdir(), 'notex-github-release-'))
   mkdirSync(join(root, 'src-tauri'))
   writeFileSync(join(root, 'package.json'), `${JSON.stringify({ version }, null, 2)}\n`)
   writeFileSync(
@@ -33,19 +33,19 @@ function fixture() {
   )
   writeFileSync(
     join(root, 'src-tauri/Cargo.toml'),
-    `[package]\nname = "MemoBox"\nversion = "${version}"\n\n[dependencies]\nother = "1"\n`,
+    `[package]\nname = "NoteX"\nversion = "${version}"\n\n[dependencies]\nother = "1"\n`,
   )
   writeFileSync(
     join(root, 'src-tauri/Cargo.lock'),
-    `version = 4\n\n[[package]]\nname = "MemoBox"\nversion = "${version}"\n\n[[package]]\nname = "other"\nversion = "1.0.0"\n`,
+    `version = 4\n\n[[package]]\nname = "NoteX"\nversion = "${version}"\n\n[[package]]\nname = "other"\nversion = "1.0.0"\n`,
   )
   const release = {
     id: 123,
     tag_name: `v${version}`,
     target_commitish: snapshotSha,
-    body: `<!-- memobox-release-source: ${sha} -->\n\n<!-- memobox-downloads:start -->\n安装包正在构建或校验\n<!-- memobox-downloads:end -->\n\n## What's Changed\nRelease notes`,
+    body: `<!-- notex-release-source: ${sha} -->\n\n<!-- notex-downloads:start -->\n安装包正在构建或校验\n<!-- notex-downloads:end -->\n\n## What's Changed\nRelease notes`,
     draft: true,
-    html_url: `https://github.com/XPoet/memo-box/releases/tag/v${version}`,
+    html_url: `https://github.com/XPoet/notex/releases/tag/v${version}`,
   }
   const assets = expectedAssets(version).map((name) => ({
     name,
@@ -74,7 +74,7 @@ function fixture() {
       snapshotSha,
       {
         sha: snapshotSha,
-        message: `chore(release): v${version}\n\nMemoBox-Release-Source: ${sha}`,
+        message: `chore(release): v${version}\n\nNoteX-Release-Source: ${sha}`,
         tree: { sha: 'snapshot-tree' },
         parents: [{ sha }],
         committer: { date },
@@ -209,14 +209,14 @@ function fixture() {
     paginate: vi.fn(async (method, args) => (await method(args)).data),
   }
   const context = {
-    repo: { owner: 'XPoet', repo: 'memo-box' },
+    repo: { owner: 'XPoet', repo: 'notex' },
     serverUrl: 'https://github.com',
     payload: {
       pull_request: {
         merged: true,
         merge_commit_sha: sha,
         base: { ref: 'main' },
-        head: { ref: 'develop', repo: { full_name: 'XPoet/memo-box' } },
+        head: { ref: 'develop', repo: { full_name: 'XPoet/notex' } },
       },
     },
   }
@@ -275,7 +275,7 @@ describe('GitHub 自动发布', () => {
       if (scenario === 'closed') pr.merged = false
       if (scenario === 'other-head') pr.head.ref = 'feature'
       if (scenario === 'other-base') pr.base.ref = 'develop'
-      if (scenario === 'fork') pr.head.repo.full_name = 'other/memo-box'
+      if (scenario === 'fork') pr.head.repo.full_name = 'other/notex'
       if (scenario === 'missing-sha') pr.merge_commit_sha = ''
       await expect(prepareRelease(args)).rejects.toThrow('只允许发布')
       expect(args.github.rest.git.getRef).not.toHaveBeenCalled()
@@ -299,7 +299,7 @@ describe('GitHub 自动发布', () => {
     expect(snapshot.files['package.json']).toContain('"version": "0.0.11"')
     expect(snapshot.files['src-tauri/tauri.conf.json']).toContain('"version": "0.0.11"')
     expect(snapshot.files['src-tauri/Cargo.toml']).toContain('version = "0.0.11"')
-    expect(snapshot.files['src-tauri/Cargo.lock']).toContain('name = "MemoBox"\nversion = "0.0.11"')
+    expect(snapshot.files['src-tauri/Cargo.lock']).toContain('name = "NoteX"\nversion = "0.0.11"')
     expect(snapshot.files['src-tauri/Cargo.lock']).toContain('name = "other"\nversion = "1.0.0"')
     expect(snapshot.files['src/feature.txt']).toBe('original application code')
     expect(
@@ -382,7 +382,7 @@ describe('GitHub 自动发布', () => {
     const args = fixture()
     Object.assign(args.release, {
       tag_name: 'untagged-abc123',
-      name: `MemoBox v${version}`,
+      name: `NoteX v${version}`,
     })
     args.releases.push(args.release)
     if (scenario === 'target') args.release.target_commitish = otherSha
@@ -555,7 +555,7 @@ describe('GitHub 自动发布', () => {
     const args = fixture()
     args.releases.push({
       tag_name: 'v0.0.12',
-      body: '<!-- memobox-release-source: ' + otherSha + ' -->',
+      body: '<!-- notex-release-source: ' + otherSha + ' -->',
       draft: true,
     })
     args.github.rest.repos.compareCommits.mockResolvedValue({ data: { status: 'ahead' } })
@@ -569,7 +569,7 @@ describe('GitHub 自动发布', () => {
     const args = fixture()
     args.releases.push({
       tag_name: 'v0.0.12',
-      body: '<!-- memobox-release-source: ' + otherSha + ' -->',
+      body: '<!-- notex-release-source: ' + otherSha + ' -->',
       draft: false,
     })
     args.github.rest.repos.compareCommits.mockResolvedValue({ data: { status: 'diverged' } })
@@ -703,7 +703,7 @@ describe('GitHub 自动发布', () => {
     expect(args.release.body).not.toContain('安装包正在构建')
     for (const name of [...expectedAssets(version), 'SHA256SUMS.txt']) {
       expect(args.fetchUrl).toHaveBeenCalledWith(
-        `https://github.com/XPoet/memo-box/releases/download/v${version}/${name}`,
+        `https://github.com/XPoet/notex/releases/download/v${version}/${name}`,
         expect.objectContaining({ method: 'HEAD', redirect: 'follow' }),
       )
     }

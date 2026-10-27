@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: memobox-release-main
+  group: notex-release-main
   cancel-in-progress: false
   queue: max
 
@@ -105,17 +105,17 @@ jobs:
           set -euo pipefail
           dmg=(src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg)
           hdiutil verify "${dmg[0]}"
-          mountpoint="$RUNNER_TEMP/memobox-install"
+          mountpoint="$RUNNER_TEMP/notex-install"
           mkdir -p "$mountpoint"
           hdiutil attach "${dmg[0]}" -mountpoint "$mountpoint" -nobrowse -readonly
           trap 'hdiutil detach "$mountpoint"' EXIT
-          app="$mountpoint/MemoBox.app"
+          app="$mountpoint/NoteX.app"
           codesign --verify --deep --strict "$app"
-          "$app/Contents/MacOS/MemoBox" > "$RUNNER_TEMP/memobox-startup.log" 2>&1 &
+          "$app/Contents/MacOS/NoteX" > "$RUNNER_TEMP/notex-startup.log" 2>&1 &
           app_pid=$!
           sleep 8
           if ! kill -0 "$app_pid" 2>/dev/null; then
-            cat "$RUNNER_TEMP/memobox-startup.log"
+            cat "$RUNNER_TEMP/notex-startup.log"
             exit 1
           fi
           kill "$app_pid"
@@ -125,14 +125,14 @@ jobs:
         shell: pwsh
         run: |
           $installer = Get-Item "src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe"
-          $installDirectory = Join-Path $env:RUNNER_TEMP 'MemoBox-installed'
+          $installDirectory = Join-Path $env:RUNNER_TEMP 'NoteX-installed'
           $setup = Start-Process -FilePath $installer.FullName -ArgumentList '/S', "/D=$installDirectory" -Wait -PassThru
           if ($setup.ExitCode -ne 0) { throw "Installer exited with $($setup.ExitCode)" }
-          $application = Join-Path $installDirectory 'MemoBox.exe'
-          if (-not (Test-Path $application)) { throw 'Installed MemoBox.exe is missing' }
+          $application = Join-Path $installDirectory 'NoteX.exe'
+          if (-not (Test-Path $application)) { throw 'Installed NoteX.exe is missing' }
           $app = Start-Process -FilePath $application -PassThru
           Start-Sleep -Seconds 8
-          if ($app.HasExited) { throw "MemoBox exited during startup with $($app.ExitCode)" }
+          if ($app.HasExited) { throw "NoteX exited during startup with $($app.ExitCode)" }
           Stop-Process -Id $app.Id
       - name: Upload missing installers to the draft
         uses: actions/github-script@v8

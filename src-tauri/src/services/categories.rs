@@ -18,7 +18,7 @@ pub struct CategoriesService {
 impl CategoriesService {
     pub fn new(data_directory: &Path) -> Self {
         Self {
-            database_path: data_directory.join("database").join("memobox.db"),
+            database_path: data_directory.join("database").join("notex.db"),
         }
     }
     pub fn list(&self) -> Result<Vec<CategoryNode>, CategoryError> {
@@ -151,7 +151,7 @@ mod tests {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |value| value.as_nanos());
-        let directory = std::env::temp_dir().join(format!("memo-box-categories-{timestamp}"));
+        let directory = std::env::temp_dir().join(format!("notex-categories-{timestamp}"));
         let _ = std::fs::create_dir_all(directory.join("database"));
         directory
     }
@@ -160,7 +160,7 @@ mod tests {
     fn enforces_depth_cycle_and_branch_delete_semantics() -> Result<(), Box<dyn std::error::Error>>
     {
         let directory = data_directory();
-        BootstrapRepository::initialize(&directory.join("database").join("memobox.db"))?;
+        BootstrapRepository::initialize(&directory.join("database").join("notex.db"))?;
         let categories = CategoriesService::new(&directory);
         let first = categories.create("项目", None)?;
         let second = categories.create("第一层", Some(&first.id))?;
@@ -187,7 +187,7 @@ mod tests {
     #[test]
     fn moves_category_subtree_and_keeps_notes_attached() -> Result<(), Box<dyn std::error::Error>> {
         let directory = data_directory();
-        BootstrapRepository::initialize(&directory.join("database").join("memobox.db"))?;
+        BootstrapRepository::initialize(&directory.join("database").join("notex.db"))?;
         let categories = CategoriesService::new(&directory);
         let source_root = categories.create("原分类", None)?;
         let source_parent = categories.create("原父分类", Some(&source_root.id))?;

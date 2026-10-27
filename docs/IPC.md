@@ -1,4 +1,4 @@
-# MemoBox IPC 契约
+# NoteX IPC 契约
 
 > 契约版本：V008
 > 最后更新：2026-07-26
@@ -32,7 +32,7 @@
 ### 行为
 
 1. Command 在阻塞线程执行目录创建、可写性检查、数据库连接和 Migration。
-2. 首次启动创建 `database`、`assets`、`temp`、`logs`、`config` 和 `database/memobox.db`。
+2. 首次启动创建 `database`、`assets`、`temp`、`logs`、`config` 和 `database/notex.db`。
 3. 重复启动幂等执行；已成功执行的 Migration 不重复运行。
 4. 若存在此前正常保存失败而落盘的恢复草稿，启动会在同一数据库事务内恢复标题和正文、删除对应草稿，再重建搜索索引；恢复失败时停止后续写入，绝不丢弃草稿。
 5. 任一步失败时前端进入只读诊断页，停止后续写入调用。
@@ -46,15 +46,15 @@
 
 ### 2.2 应用关闭与 `exit_application`
 
-原生层拦截窗口 `CloseRequested` 和应用 `ExitRequested`，向固定 `main` 窗口发送无载荷事件 `memo-box-exit-requested`。Vue 应用根部通过 Window Service 注册监听，所有路由共用同一关闭流程，不依赖工作台是否挂载。
+原生层拦截窗口 `CloseRequested` 和应用 `ExitRequested`，向固定 `main` 窗口发送无载荷事件 `notex-exit-requested`。Vue 应用根部通过 Window Service 注册监听，所有路由共用同一关闭流程，不依赖工作台是否挂载。
 
 前端串行保存当前草稿，保存期间若有新的编辑则继续保存最新版本；保存失败时阻止关闭并展示重试提示。保存成功后调用 `exit_application`，无参数，成功返回空值，窗口操作失败复用 `BootstrapError`。重复关闭请求不会启动多份备份。
 
-Command 委托 Shutdown Service 隐藏主窗口并等待后台阻塞任务：Backup Service 通过 Export Repository 在同一数据库事务中读取所有未删除笔记、分类层级和关联图片，生成应用数据目录内固定的 `backups/MemoBox-latest.zip`。本功能不接受前端路径，也不受手动导出默认目录或当前筛选条件影响。
+Command 委托 Shutdown Service 隐藏主窗口并等待后台阻塞任务：Backup Service 通过 Export Repository 在同一数据库事务中读取所有未删除笔记、分类层级和关联图片，生成应用数据目录内固定的 `backups/NoteX-latest.zip`。本功能不接受前端路径，也不受手动导出默认目录或当前筛选条件影响。
 
 ZIP 内按分类层级保存 Markdown，未分类笔记放入“未分类”目录；图片集中保存在 `assets` 并改写相对引用。分类和笔记重名时沿用手动导出的文件名清理、冲突编号规则。回收站、标签、应用设置和数据库文件不参与本次 Markdown 导出。
 
-后台直接流式写入同目录 `MemoBox-latest.zip.part`，完成 ZIP 尾部写入并同步文件后，以重命名替换 `MemoBox-latest.zip`。正常结束只保留一份 ZIP；任务失败会清理本次中间文件、保留上一份完整 ZIP，不弹出导出进度或错误提示，随后退出进程。后台任务结束前持续拦截重复退出，结束后才允许进程退出。启动未完成或数据库不可用时不得创建空库覆盖旧备份；强制结束、崩溃和断电不在关闭事件保证范围内。
+后台直接流式写入同目录 `NoteX-latest.zip.part`，完成 ZIP 尾部写入并同步文件后，以重命名替换 `NoteX-latest.zip`。正常结束只保留一份 ZIP；任务失败会清理本次中间文件、保留上一份完整 ZIP，不弹出导出进度或错误提示，随后退出进程。后台任务结束前持续拦截重复退出，结束后才允许进程退出。启动未完成或数据库不可用时不得创建空库覆盖旧备份；强制结束、崩溃和断电不在关闭事件保证范围内。
 
 ## 3. 前端状态
 
@@ -238,7 +238,7 @@ Rust 必须根据字节文件头识别 PNG、JPEG、WebP 或 GIF，并以受限�
 
 前端通过 Tauri `dialog` 插件选择已存在的目标目录；取消选择时不得发起导出。前端 Service 仅将该选择结果传入 `export_notes`，Rust 仍会验证路径为已规范化的本地目录、拒绝文件和相对路径，并且绝不将目标目录的绝对路径返回给前端。
 
-每次导出会在目标目录中创建一个不覆盖已有文件的 `MemoBox 导出-YYYYMMDD-HHmmss` 子目录。结果只返回安全的目录显示名；前端只能使用本次任务的 `jobId` 调用 `open_export_directory`，由 Rust 从受控任务记录中打开目录，不能自行传入路径。
+每次导出会在目标目录中创建一个不覆盖已有文件的 `NoteX 导出-YYYYMMDD-HHmmss` 子目录。结果只返回安全的目录显示名；前端只能使用本次任务的 `jobId` 调用 `open_export_directory`，由 Rust 从受控任务记录中打开目录，不能自行传入路径。
 
 ### `export_notes`
 

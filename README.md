@@ -1,25 +1,25 @@
-# MemoBox
+# NoteX
 
-MemoBox 是一款本地笔记桌面应用。项目使用 Tauri 2、Vue 3、TypeScript、Rust 和 SQLite 构建。
+NoteX 是一款本地笔记桌面应用。项目使用 Tauri 2、Vue 3、TypeScript、Rust 和 SQLite 构建。
 
 ## 下载安装
 
-首次自动发布成功后，可从 [GitHub Releases 最新版本](https://github.com/XPoet/memo-box/releases/latest) 的 **Assets** 直接下载安装包，无需安装开发环境：
+首次自动发布成功后，可从 本仓库 GitHub Releases 最新版本页面 的 **Assets** 直接下载安装包，无需安装开发环境：
 
-| 平台                          | 安装包                                                                                         |
-| ----------------------------- | ---------------------------------------------------------------------------------------------- |
-| Windows x64                   | `MemoBox_<版本号>_windows_x64-setup.exe`，或用于 MSI 安装的 `MemoBox_<版本号>_windows_x64.msi` |
-| macOS Apple Silicon（M 系列） | `MemoBox_<版本号>_macos_aarch64.dmg`                                                           |
-| macOS Intel                   | `MemoBox_<版本号>_macos_x64.dmg`                                                               |
+| 平台                          | 安装包                                                                                     |
+| ----------------------------- | ------------------------------------------------------------------------------------------ |
+| Windows x64                   | `NoteX_<版本号>_windows_x64-setup.exe`，或用于 MSI 安装的 `NoteX_<版本号>_windows_x64.msi` |
+| macOS Apple Silicon（M 系列） | `NoteX_<版本号>_macos_aarch64.dmg`                                                         |
+| macOS Intel                   | `NoteX_<版本号>_macos_x64.dmg`                                                             |
 
-Windows 运行 EXE 或 MSI 安装；macOS 打开 DMG，将 MemoBox 拖入“应用程序”。当前 Windows 安装包未配置代码签名证书，macOS 使用 ad-hoc 签名且未经 Apple 公证，首次安装或启动可能出现系统安全提示。安装说明、校验方法和发布启用步骤见 [发布指南](docs/RELEASE.md)。
+Windows 运行 EXE 或 MSI 安装；macOS 打开 DMG，将 NoteX 拖入“应用程序”。当前 Windows 安装包未配置代码签名证书，macOS 使用 ad-hoc 签名且未经 Apple 公证，首次安装或启动可能出现系统安全提示。安装说明、校验方法和发布启用步骤见 [发布指南](docs/RELEASE.md)。
 
 ## 项目特点
 
 - 本地优先：业务数据、图片资源、日志和配置均保存在系统应用数据目录，不依赖网络、CDN 或远程字体。
 - 拖拽分类：按住笔记列表中的笔记，拖入左侧分类或“未分类”即可移动。
 - 灵活分栏：笔记列表与编辑器可拖动分隔条调整宽度。
-- 关闭时静默备份：保存当前草稿后，在后台将全部分类、子分类和未分类笔记及关联图片压缩到应用数据目录的 `backups/MemoBox-latest.zip`，本地只保留最新一份备份。
+- 关闭时静默备份：保存当前草稿后，在后台将全部分类、子分类和未分类笔记及关联图片压缩到应用数据目录的 `backups/NoteX-latest.zip`，本地只保留最新一份备份。
 - 分层架构：`Vue → Service / Pinia → Tauri Command → Rust Service → Repository → SQLite / 文件系统`。
 - 安全初始化：启动时创建固定目录，启用 SQLite 外键、WAL、NORMAL synchronous 与 5 秒 busy timeout，并以事务执行 Migration。
 - 最小权限：当前 Capability 仅授予主窗口 `core:default`，不开放 Shell、HTTP 或任意文件系统权限。
@@ -85,16 +85,16 @@ pnpm tauri:dev
 
 1. 通过 Tauri 系统路径 API 获取固定应用数据目录。
 2. 创建 `database`、`assets`、`temp`、`logs`、`config` 子目录。
-3. 创建或打开 `database/memobox.db`。
+3. 创建或打开 `database/notex.db`。
 4. 应用 V001 Migration，并向前端返回数据目录与结构版本。
 
 初始化失败时，应用显示安全诊断与重试入口；不会把 SQL、数据库绝对路径或笔记内容暴露给界面。
 
 ## 关闭时自动备份
 
-点击窗口关闭按钮，或通过系统菜单、退出快捷键关闭应用时，MemoBox 会先保存当前编辑内容，再隐藏窗口，在后台生成 ZIP 压缩文件，完成后退出进程。此功能在工作台、设置和其他页面均生效，无需选择目录或确认。
+点击窗口关闭按钮，或通过系统菜单、退出快捷键关闭应用时，NoteX 会先保存当前编辑内容，再隐藏窗口，在后台生成 ZIP 压缩文件，完成后退出进程。此功能在工作台、设置和其他页面均生效，无需选择目录或确认。
 
-备份固定存放在应用数据目录的 `backups/MemoBox-latest.zip`。可在设置页点击“打开数据目录”，进入 `backups` 文件夹查看。ZIP 内按分类层级保存 Markdown，未分类笔记放入“未分类”目录，关联图片集中放入 `assets`，Markdown 图片链接使用相对路径；回收站笔记不参与备份。它是 Markdown 和图片导出文件，不是包含标签、设置等数据的数据库恢复包。
+备份固定存放在应用数据目录的 `backups/NoteX-latest.zip`。可在设置页点击“打开数据目录”，进入 `backups` 文件夹查看。ZIP 内按分类层级保存 Markdown，未分类笔记放入“未分类”目录，关联图片集中放入 `assets`，Markdown 图片链接使用相对路径；回收站笔记不参与备份。它是 Markdown 和图片导出文件，不是包含标签、设置等数据的数据库恢复包。
 
 每次成功生成并写入完整 ZIP 后，才替换上一份备份。遇到磁盘不可写、资源缺失等导出错误时，静默保留上一份完整备份并退出；当前笔记保存失败则保留窗口，提示重试。强制结束进程、崩溃或断电无法保证执行关闭备份。
 
@@ -147,9 +147,9 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 ### GitHub 自动发布
 
-本仓库的 `develop` 分支通过 Pull Request 合并到 `main` 后，GitHub Actions 自动递增补丁版本，例如 `0.0.10 → 0.0.11`，同步四处 MemoBox 自身版本，生成版本提交与标签并将版本提交回 `main`，随后构建 Windows x64（EXE、MSI）及 macOS（Apple Silicon、Intel）安装包。质量检查与全部构建成功、安装包完整性检查通过后，才公开 GitHub Release，并附上下载链接、自动生成的变更说明和 `SHA256SUMS.txt`。
+本仓库的 `develop` 分支通过 Pull Request 合并到 `main` 后，GitHub Actions 自动递增补丁版本，例如 `0.0.10 → 0.0.11`，同步四处 NoteX 自身版本，生成版本提交与标签并将版本提交回 `main`，随后构建 Windows x64（EXE、MSI）及 macOS（Apple Silicon、Intel）安装包。质量检查与全部构建成功、安装包完整性检查通过后，才公开 GitHub Release，并附上下载链接、自动生成的变更说明和 `SHA256SUMS.txt`。
 
-日常发版只需推送 `develop` 并合并 PR，无需提前执行 `pnpm release` 或修改版本号。同一次合并的失败重跑复用已分配版本，不会重复递增；版本分配参考仓库、`main`、已有标签和草稿中的最高正式版本，避免连续合并时发生版本冲突。版本提交只更新 MemoBox 自身版本，不升级依赖；`src-tauri/Cargo.lock` 仅同步 `MemoBox` 包版本。
+日常发版只需推送 `develop` 并合并 PR，无需提前执行 `pnpm release` 或修改版本号。同一次合并的失败重跑复用已分配版本，不会重复递增；版本分配参考仓库、`main`、已有标签和草稿中的最高正式版本，避免连续合并时发生版本冲突。版本提交只更新 NoteX 自身版本，不升级依赖；`src-tauri/Cargo.lock` 仅同步 `NoteX` 包版本。
 
 ### 本地准备新版本
 
@@ -165,7 +165,7 @@ pnpm release major     # 递增 major，例如 0.0.7 → 1.0.0
 pnpm release 1.2.3     # 指定高于当前版本的正式版本号
 ```
 
-发布命令同步 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 和 `src-tauri/Cargo.lock` 中 MemoBox 自身的版本，不修改依赖版本或 pnpm 锁文件。随后调用 `pnpm tauri:build:dmg`，执行完整前端与 Rust 质量检查、生成当前 Mac 的未签名 DMG 并输出 SHA-256 校验值。全部成功后，仅暂存上述四个版本文件，自动创建 `chore(release): v版本号` Git 提交。
+发布命令同步 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 和 `src-tauri/Cargo.lock` 中 NoteX 自身的版本，不修改依赖版本或 pnpm 锁文件。随后调用 `pnpm tauri:build:dmg`，执行完整前端与 Rust 质量检查、生成当前 Mac 的未签名 DMG 并输出 SHA-256 校验值。全部成功后，仅暂存上述四个版本文件，自动创建 `chore(release): v版本号` Git 提交。
 
 命令不会创建 Git 标签、推送远程或上传产物。检查或打包失败时，版本改动保留在工作区，不自动提交；先用 `git diff` 检查失败状态，修复问题并将四个版本文件恢复到发布前的版本，提交修复后重新执行。若 Git 提交阶段失败，先检查 `git status` 中的暂存内容，再处理 Git 报错。
 
@@ -191,9 +191,9 @@ pnpm exec tauri build --debug
 pnpm tauri:build:dmg
 ```
 
-该命令会先运行完整检查，再生成当前 Mac 的发行产物并输出 SHA-256 校验值。`--no-sign` 明确跳过 Developer 签名；自用 DMG 位于 `src-tauri/target/release/bundle/dmg/`。双击 DMG，将 `MemoBox.app` 拖入“应用程序”文件夹后即可安装。
+该命令会先运行完整检查，再生成当前 Mac 的发行产物并输出 SHA-256 校验值。`--no-sign` 明确跳过 Developer 签名；自用 DMG 位于 `src-tauri/target/release/bundle/dmg/`。双击 DMG，将 `NoteX.app` 拖入“应用程序”文件夹后即可安装。
 
-当前自用版本不签名、不公证，也不上传 App Store。若 macOS 对从外部位置复制的未签名应用显示 Gatekeeper 提示，在 Finder 中按住 Control 点按 `MemoBox.app`，选择“打开”并再次确认；不要通过关闭系统安全机制绕过提示。
+当前自用版本不签名、不公证，也不上传 App Store。若 macOS 对从外部位置复制的未签名应用显示 Gatekeeper 提示，在 Finder 中按住 Control 点按 `NoteX.app`，选择“打开”并再次确认；不要通过关闭系统安全机制绕过提示。
 
 首次安装后，应在断网状态完成新建、编辑、文本和图片粘贴、分类、标签、搜索、回收站、导出、设置、目录选择、窗口恢复与单实例的本机验收。保留上述 `shasum` 输出，便于确认后续安装的文件未被替换。
 

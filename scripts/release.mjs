@@ -30,11 +30,11 @@ function replaceOnce(content, pattern, replacement, path) {
 
 function packageSection(content, path) {
   const pattern = path.endsWith('.lock')
-    ? /\[\[package\]\]\r?\nname = "MemoBox"\r?\n[\s\S]*?(?=\r?\n\[\[package\]\]|$)/
+    ? /\[\[package\]\]\r?\nname = "NoteX"\r?\n[\s\S]*?(?=\r?\n\[\[package\]\]|$)/
     : /^\[package\]\r?\n[\s\S]*?(?=^\[|(?![\s\S]))/m
   const section = content.match(pattern)?.[0]
   if (!section) {
-    throw new Error(`${path} 缺少 MemoBox 包配置。`)
+    throw new Error(`${path} 缺少 NoteX 包配置。`)
   }
   return { pattern, section }
 }
@@ -86,7 +86,7 @@ function release() {
     throw new Error('用法：pnpm release [patch|minor|major|版本号] [--dry-run]')
   }
   if (resolve(git(['rev-parse', '--show-toplevel'])) !== root) {
-    throw new Error('发布脚本必须位于 MemoBox Git 仓库根目录下。')
+    throw new Error('发布脚本必须位于 NoteX Git 仓库根目录下。')
   }
   git(['symbolic-ref', '--quiet', 'HEAD'])
   if (git(['status', '--porcelain', '--untracked-files=all'])) {

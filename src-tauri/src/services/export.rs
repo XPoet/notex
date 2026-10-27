@@ -90,7 +90,7 @@ pub struct ExportService {
 impl ExportService {
     pub fn new(data_directory: &Path) -> Self {
         Self {
-            database_path: data_directory.join("database").join("memobox.db"),
+            database_path: data_directory.join("database").join("notex.db"),
             assets_directory: data_directory.join("assets"),
         }
     }
@@ -373,7 +373,7 @@ fn validate_target_directory(target_directory: &str) -> Result<PathBuf, ExportEr
 fn create_output_directory(target_directory: &Path) -> Result<(PathBuf, String), ExportError> {
     let now = OffsetDateTime::now_utc();
     let base = format!(
-        "MemoBox 导出-{:04}{:02}{:02}-{:02}{:02}{:02}",
+        "NoteX 导出-{:04}{:02}{:02}-{:02}{:02}{:02}",
         now.year(),
         now.month() as u8,
         now.day(),
@@ -588,7 +588,7 @@ mod tests {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |value| value.as_nanos());
-        let directory = std::env::temp_dir().join(format!("memo-box-export-{timestamp}"));
+        let directory = std::env::temp_dir().join(format!("notex-export-{timestamp}"));
         let _ = fs::create_dir_all(directory.join("database"));
         let _ = fs::create_dir_all(directory.join("assets"));
         directory
@@ -612,7 +612,7 @@ mod tests {
     #[test]
     fn export_paths_rewrite_assets_at_category_depth() -> Result<(), Box<dyn std::error::Error>> {
         let directory = data_directory();
-        let database_path = directory.join("database").join("memobox.db");
+        let database_path = directory.join("database").join("notex.db");
         BootstrapRepository::initialize(&database_path)?;
         let connection = open_database(&database_path)?;
         connection.execute("INSERT INTO categories (id, name, parent_id, level, sort_order, created_at, updated_at) VALUES ('root', '工作', NULL, 1, 0, '2026-07-24T00:00:00Z', '2026-07-24T00:00:00Z')", [])?;
@@ -657,7 +657,7 @@ mod tests {
     fn exports_all_direct_category_notes_including_uncategorized()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = data_directory();
-        let database_path = directory.join("database").join("memobox.db");
+        let database_path = directory.join("database").join("notex.db");
         BootstrapRepository::initialize(&database_path)?;
         let mut connection = open_database(&database_path)?;
         let transaction = connection.transaction()?;
@@ -714,7 +714,7 @@ mod tests {
     #[test]
     fn export_partial_failure_keeps_successful_notes() -> Result<(), Box<dyn std::error::Error>> {
         let directory = data_directory();
-        let database_path = directory.join("database").join("memobox.db");
+        let database_path = directory.join("database").join("notex.db");
         BootstrapRepository::initialize(&database_path)?;
         let connection = open_database(&database_path)?;
         connection.execute("INSERT INTO tags (id, name, created_at, updated_at) VALUES ('tag', '资料', '2026-07-24T00:00:00Z', '2026-07-24T00:00:00Z')", [])?;
@@ -746,7 +746,7 @@ mod tests {
     #[test]
     fn export_cancellation_stops_future_writes() -> Result<(), Box<dyn std::error::Error>> {
         let directory = data_directory();
-        let database_path = directory.join("database").join("memobox.db");
+        let database_path = directory.join("database").join("notex.db");
         BootstrapRepository::initialize(&database_path)?;
         let connection = open_database(&database_path)?;
         connection.execute("INSERT INTO notes (id, title, content, created_at, updated_at) VALUES ('note', '待取消笔记', '正文', '2026-07-24T00:00:00Z', '2026-07-24T00:00:00Z')", [])?;

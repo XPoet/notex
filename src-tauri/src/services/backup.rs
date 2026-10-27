@@ -28,7 +28,7 @@ impl BackupService {
             .data_directory
             .canonicalize()
             .map_err(|_| ExportError::Write)?;
-        let database_path = root.join("database/memobox.db");
+        let database_path = root.join("database/notex.db");
         // 启动失败时不创建空数据库，也不覆盖已有备份。
         if !database_path.is_file() {
             return Err(ExportError::Snapshot);
@@ -47,7 +47,7 @@ impl BackupService {
         if !directory.starts_with(&root) {
             return Err(ExportError::Write);
         }
-        let temporary_path = directory.join("MemoBox-latest.zip.part");
+        let temporary_path = directory.join("NoteX-latest.zip.part");
         if let Ok(metadata) = fs::symlink_metadata(&temporary_path) {
             if !metadata.file_type().is_file() {
                 return Err(ExportError::Write);
@@ -128,7 +128,7 @@ impl BackupService {
             let file = archive.finish().map_err(|_| ExportError::Write)?;
             file.sync_all().map_err(|_| ExportError::Write)?;
             drop(file);
-            fs::rename(&temporary_path, directory.join("MemoBox-latest.zip"))
+            fs::rename(&temporary_path, directory.join("NoteX-latest.zip"))
                 .map_err(|_| ExportError::Write)
         })();
         if result.is_err() {
@@ -162,10 +162,10 @@ mod tests {
     use super::*;
 
     fn fixture() -> Result<PathBuf, Box<dyn std::error::Error>> {
-        let directory = std::env::temp_dir().join(format!("memo-box-backup-{}", Uuid::new_v4()));
+        let directory = std::env::temp_dir().join(format!("notex-backup-{}", Uuid::new_v4()));
         fs::create_dir_all(directory.join("database"))?;
         fs::create_dir_all(directory.join("assets"))?;
-        let database = directory.join("database/memobox.db");
+        let database = directory.join("database/notex.db");
         BootstrapRepository::initialize(&database)?;
         let mut connection = open_database(&database)?;
         let transaction = connection.transaction()?;
@@ -201,7 +201,7 @@ mod tests {
     }
 
     fn attach_image(directory: &Path, name: &str) -> Result<(), Box<dyn std::error::Error>> {
-        let mut connection = open_database(&directory.join("database/memobox.db"))?;
+        let mut connection = open_database(&directory.join("database/notex.db"))?;
         let transaction = connection.transaction()?;
         transaction.execute(
             "INSERT INTO assets (id, file_name, extension, relative_path, mime_type, size, width, height, hash, created_at)
@@ -224,7 +224,7 @@ mod tests {
     }
 
     fn latest(directory: &Path) -> PathBuf {
-        directory.join("backups/MemoBox-latest.zip")
+        directory.join("backups/NoteX-latest.zip")
     }
 
     #[test]
@@ -283,7 +283,7 @@ mod tests {
         let directory = fixture()?;
         let service = BackupService::new(&directory);
         service.create_latest()?;
-        let mut connection = open_database(&directory.join("database/memobox.db"))?;
+        let mut connection = open_database(&directory.join("database/notex.db"))?;
         let transaction = connection.transaction()?;
         transaction.execute("UPDATE notes SET is_deleted = 1", [])?;
         transaction.commit()?;
@@ -318,7 +318,7 @@ mod tests {
 
         let directory = fixture()?;
         attach_image(&directory, "outside.png")?;
-        let outside = std::env::temp_dir().join(format!("memo-box-outside-{}", Uuid::new_v4()));
+        let outside = std::env::temp_dir().join(format!("notex-outside-{}", Uuid::new_v4()));
         fs::write(&outside, b"private")?;
         symlink(&outside, directory.join("assets/outside.png"))?;
         assert!(BackupService::new(&directory).create_latest().is_err());
@@ -327,14 +327,14 @@ mod tests {
         let another = fixture()?;
         symlink(directory.join("assets"), another.join("backups"))?;
         assert!(BackupService::new(&another).create_latest().is_err());
-        assert!(!directory.join("assets/MemoBox-latest.zip").exists());
+        assert!(!directory.join("assets/NoteX-latest.zip").exists());
         Ok(())
     }
 
     #[test]
     fn does_not_create_a_database_when_startup_has_not_completed()
     -> Result<(), Box<dyn std::error::Error>> {
-        let directory = std::env::temp_dir().join(format!("memo-box-backup-{}", Uuid::new_v4()));
+        let directory = std::env::temp_dir().join(format!("notex-backup-{}", Uuid::new_v4()));
         fs::create_dir_all(&directory)?;
         assert!(BackupService::new(&directory).create_latest().is_err());
         assert!(!directory.join("database").exists());

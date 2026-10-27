@@ -82,7 +82,7 @@ impl From<BootstrapError> for BootstrapCommandError {
             ),
             BootstrapError::DatabaseLocked => (
                 "DATABASE_LOCKED",
-                "本地数据库正被占用，请关闭其他 MemoBox 窗口后重试。",
+                "本地数据库正被占用，请关闭其他 NoteX 窗口后重试。",
             ),
             BootstrapError::DatabaseCorrupted => (
                 "DATABASE_CORRUPTED",

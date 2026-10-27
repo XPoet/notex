@@ -21,7 +21,7 @@ describe('发布工作流的原生脚本入口', () => {
   it.each(['prepareRelease', 'uploadInstallers', 'publishRelease'])(
     '%s 在当前平台及含特殊字符的工作区中加载 ESM 并传递发布参数',
     (name) => {
-      const root = mkdtempSync(join(tmpdir(), 'memo-box release #%-'))
+      const root = mkdtempSync(join(tmpdir(), 'notex release #%-'))
       mkdirSync(join(root, 'scripts'))
       writeFileSync(
         join(root, 'scripts/github-release.mjs'),

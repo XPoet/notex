@@ -18,7 +18,7 @@ pub struct NotesService {
 impl NotesService {
     pub fn new(data_directory: &Path) -> Self {
         Self {
-            database_path: data_directory.join("database").join("memobox.db"),
+            database_path: data_directory.join("database").join("notex.db"),
         }
     }
 
@@ -117,7 +117,7 @@ mod tests {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |duration| duration.as_nanos());
-        let root = std::env::temp_dir().join(format!("memo-box-notes-{timestamp}"));
+        let root = std::env::temp_dir().join(format!("notex-notes-{timestamp}"));
         let _ = std::fs::create_dir_all(root.join("database"));
         root
     }
@@ -125,7 +125,7 @@ mod tests {
     #[test]
     fn creates_saves_lists_and_cleans_up_empty_notes() -> Result<(), Box<dyn std::error::Error>> {
         let data_directory = data_directory();
-        BootstrapRepository::initialize(&data_directory.join("database").join("memobox.db"))?;
+        BootstrapRepository::initialize(&data_directory.join("database").join("notex.db"))?;
         let service = NotesService::new(&data_directory);
 
         let note = service.create()?;
@@ -152,7 +152,7 @@ mod tests {
     #[test]
     fn saves_hyphenated_multiline_content() -> Result<(), Box<dyn std::error::Error>> {
         let data_directory = data_directory();
-        BootstrapRepository::initialize(&data_directory.join("database").join("memobox.db"))?;
+        BootstrapRepository::initialize(&data_directory.join("database").join("notex.db"))?;
         let service = NotesService::new(&data_directory);
         let note = service.create()?;
         let content = "9xxxx-2xxxx\naxxxx-cxxxx\n0xxxx-2xxxx\nbxxxx-acccc\n5xxxx-ccccc\ndcccc-5cccc\n8cccc-1cccc\n8cccc-aaaaa\n6cccc-aaaaa\n3cccc-0aaaa\nccccc-daaaa\nbcccc-6aaaa\ndaaaa-bcccc\nfcccc-1bbbb\neaaaa-8aaaa\ndaaaa-4aaaa";

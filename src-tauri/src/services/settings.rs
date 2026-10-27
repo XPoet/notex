@@ -16,7 +16,7 @@ impl SettingsService {
     pub fn new(data_directory: &Path, desktop_directory: &Path) -> Self {
         Self {
             data_directory: data_directory.to_path_buf(),
-            database_path: data_directory.join("database").join("memobox.db"),
+            database_path: data_directory.join("database").join("notex.db"),
             desktop_directory: desktop_directory.to_path_buf(),
         }
     }
@@ -143,7 +143,7 @@ mod tests {
         let stamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |duration| duration.as_nanos());
-        let directory = std::env::temp_dir().join(format!("memo-box-settings-{stamp}"));
+        let directory = std::env::temp_dir().join(format!("notex-settings-{stamp}"));
         let _ = std::fs::create_dir_all(directory.join("database"));
         directory
     }
@@ -151,7 +151,7 @@ mod tests {
     #[test]
     fn saves_and_reads_allowed_preferences() -> Result<(), Box<dyn std::error::Error>> {
         let directory = data_directory();
-        BootstrapRepository::initialize(&directory.join("database").join("memobox.db"))?;
+        BootstrapRepository::initialize(&directory.join("database").join("notex.db"))?;
         let service = SettingsService::new(&directory, &directory);
         let snapshot = service.save(
             &SaveSettingsRequest {
@@ -183,7 +183,7 @@ mod tests {
         let directory = data_directory();
         let desktop_directory = directory.join("Desktop");
         std::fs::create_dir_all(&desktop_directory)?;
-        BootstrapRepository::initialize(&directory.join("database").join("memobox.db"))?;
+        BootstrapRepository::initialize(&directory.join("database").join("notex.db"))?;
         let snapshot = SettingsService::new(&directory, &desktop_directory).get("0.1.0")?;
 
         assert_eq!(

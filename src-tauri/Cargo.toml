@@ -1,13 +1,13 @@
 [package]
-name = "MemoBox"
+name = "NoteX"
 version = "0.0.10"
 description = "纯本地笔记桌面应用"
-authors = ["MemoBox"]
+authors = ["NoteX"]
 edition = "2024"
 rust-version = "1.85"
 
 [lib]
-name = "memo_box_lib"
+name = "notex_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]

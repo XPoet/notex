@@ -16,7 +16,7 @@ import { useExportStore } from '@/stores/export'
 const scope = { kind: 'note' as const, id: 'note-1' }
 const result = {
   jobId: '118de0d6-6a4c-4f1e-bef1-5f0878069a8a',
-  directoryLabel: 'MemoBox 导出-20260724-120000',
+  directoryLabel: 'NoteX 导出-20260724-120000',
   exportedCount: 1,
   failedCount: 0,
   cancelled: false,

@@ -15,7 +15,7 @@ describe('window service', () => {
     const handler = vi.fn().mockResolvedValue(undefined)
 
     expect(await onExitRequested(handler)).toBe(stop)
-    expect(listen).toHaveBeenCalledWith('memo-box-exit-requested', expect.any(Function))
+    expect(listen).toHaveBeenCalledWith('notex-exit-requested', expect.any(Function))
     listen.mock.calls[0][1]()
     expect(handler).toHaveBeenCalledOnce()
   })

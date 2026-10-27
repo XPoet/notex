@@ -1,3 +1,3 @@
 fn main() -> Result<(), tauri::Error> {
-    memo_box_lib::run()
+    notex_lib::run()
 }

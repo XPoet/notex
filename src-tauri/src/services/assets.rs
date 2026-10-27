@@ -20,7 +20,7 @@ pub struct AssetsService {
 impl AssetsService {
     pub fn new(data_directory: &Path) -> Self {
         Self {
-            database_path: data_directory.join("database").join("memobox.db"),
+            database_path: data_directory.join("database").join("notex.db"),
             assets_directory: data_directory.join("assets"),
             temp_directory: data_directory.join("temp"),
         }
@@ -427,8 +427,8 @@ mod tests {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |duration| duration.as_nanos());
-        let root = std::env::temp_dir().join(format!("memo-box-assets-{timestamp}"));
-        let database_path = root.join("database").join("memobox.db");
+        let root = std::env::temp_dir().join(format!("notex-assets-{timestamp}"));
+        let database_path = root.join("database").join("notex.db");
         std::fs::create_dir_all(root.join("database"))?;
         BootstrapRepository::initialize(&database_path)?;
         let notes = NotesService::new(&root);
@@ -449,7 +449,7 @@ mod tests {
         );
         assert!(
             service
-                .read_note_image(&first_note.id, "assets/../database/memobox.db")
+                .read_note_image(&first_note.id, "assets/../database/notex.db")
                 .is_err()
         );
         let reused = service.save_pasted_image(&second_note.id, &png)?;
@@ -499,9 +499,9 @@ mod tests {
 
     fn preview_fixture()
     -> Result<(std::path::PathBuf, AssetsService, String), Box<dyn std::error::Error>> {
-        let root = std::env::temp_dir().join(format!("memo-box-preview-{}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("notex-preview-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(root.join("database"))?;
-        BootstrapRepository::initialize(&root.join("database").join("memobox.db"))?;
+        BootstrapRepository::initialize(&root.join("database").join("notex.db"))?;
         let note = NotesService::new(&root).create()?;
         let service = AssetsService::new(&root);
         Ok((root, service, note.id))

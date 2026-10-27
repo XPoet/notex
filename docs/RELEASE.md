@@ -1,19 +1,19 @@
-# MemoBox 发布指南
+# NoteX 发布指南
 
 ## 下载安装
 
-打开 [GitHub Releases 最新版本](https://github.com/XPoet/memo-box/releases/latest)，在下载表或 **Assets** 中选择安装包。首次自动发布成功前，仓库没有可供下载的 Release。
+打开 本仓库 GitHub Releases 最新版本页面，在下载表或 **Assets** 中选择安装包。首次自动发布成功前，仓库没有可供下载的 Release。
 
 标记为 **Draft** 的版本仍处于构建或校验阶段，不能使用正式下载地址。草稿正文只显示构建状态；四个安装包全部上传并完成校验后，工作流自动公开 Release、生成下载表，并以未登录请求验证表中四个下载链接及 `SHA256SUMS.txt`。只有发布步骤通过后，才能将本次版本作为可下载版本交付。
 
-| 平台                | 文件名                                   | 使用方式                  |
-| ------------------- | ---------------------------------------- | ------------------------- |
-| Windows x64         | `MemoBox_<版本号>_windows_x64-setup.exe` | 双击安装，适合一般用户    |
-| Windows x64         | `MemoBox_<版本号>_windows_x64.msi`       | MSI 安装包，与 EXE 二选一 |
-| macOS Apple Silicon | `MemoBox_<版本号>_macos_aarch64.dmg`     | 适用于 M 系列芯片的 Mac   |
-| macOS Intel         | `MemoBox_<版本号>_macos_x64.dmg`         | 适用于 Intel 芯片的 Mac   |
+| 平台                | 文件名                                 | 使用方式                  |
+| ------------------- | -------------------------------------- | ------------------------- |
+| Windows x64         | `NoteX_<版本号>_windows_x64-setup.exe` | 双击安装，适合一般用户    |
+| Windows x64         | `NoteX_<版本号>_windows_x64.msi`       | MSI 安装包，与 EXE 二选一 |
+| macOS Apple Silicon | `NoteX_<版本号>_macos_aarch64.dmg`     | 适用于 M 系列芯片的 Mac   |
+| macOS Intel         | `NoteX_<版本号>_macos_x64.dmg`         | 适用于 Intel 芯片的 Mac   |
 
-macOS 打开 DMG 后，将 `MemoBox.app` 拖入“应用程序”。当前 macOS 包使用 ad-hoc 签名，未使用 Developer ID 证书，也未经过 Apple 公证；从浏览器下载后仍可能被 Gatekeeper 拦截。确认下载来自本仓库后，在系统设置 → 隐私与安全性中选择“仍要打开”，再确认启动。当前 Windows 包未配置代码签名证书，系统可能显示未知发布者或 SmartScreen 提示；首次安装缺少 WebView2 Runtime 的设备可能需要联网安装该运行环境。
+macOS 打开 DMG 后，将 `NoteX.app` 拖入“应用程序”。当前 macOS 包使用 ad-hoc 签名，未使用 Developer ID 证书，也未经过 Apple 公证；从浏览器下载后仍可能被 Gatekeeper 拦截。确认下载来自本仓库后，在系统设置 → 隐私与安全性中选择“仍要打开”，再确认启动。当前 Windows 包未配置代码签名证书，系统可能显示未知发布者或 SmartScreen 提示；首次安装缺少 WebView2 Runtime 的设备可能需要联网安装该运行环境。
 
 `Source code (zip)` 和 `Source code (tar.gz)` 是 GitHub 自动提供的源码，不是安装包。该发布流程没有接入应用内自动更新，更新时下载并安装新版本。
 
@@ -21,12 +21,12 @@ macOS 打开 DMG 后，将 `MemoBox.app` 拖入“应用程序”。当前 macOS
 
 ```bash
 # macOS：在下载文件所在目录执行
-shasum -a 256 MemoBox_0.0.11_macos_aarch64.dmg
+shasum -a 256 NoteX_0.0.11_macos_aarch64.dmg
 ```
 
 ```powershell
 # Windows PowerShell：在下载文件所在目录执行
-Get-FileHash .\MemoBox_0.0.11_windows_x64-setup.exe -Algorithm SHA256
+Get-FileHash .\NoteX_0.0.11_windows_x64-setup.exe -Algorithm SHA256
 ```
 
 将输出与 `SHA256SUMS.txt` 中对应文件的哈希比较，下载其他版本时替换示例版本号。
@@ -50,14 +50,14 @@ Get-FileHash .\MemoBox_0.0.11_windows_x64-setup.exe -Algorithm SHA256
 2. 合并本仓库 `develop` → `main` 的 PR。
 3. 等待 Actions 完成自动版本递增、构建和 GitHub Release 发布。
 
-不需要提前执行 `pnpm release`、手动改版本、创建标签或上传安装包。工作流取本次合并、当前 `main`、已有正式版本标签和 Release 草稿中的最高版本，自动递增一次 patch，并同步四处 MemoBox 自身版本：
+不需要提前执行 `pnpm release`、手动改版本、创建标签或上传安装包。工作流取本次合并、当前 `main`、已有正式版本标签和 Release 草稿中的最高版本，自动递增一次 patch，并同步四处 NoteX 自身版本：
 
 - `package.json`
 - `src-tauri/tauri.conf.json`
 - `src-tauri/Cargo.toml`
-- `src-tauri/Cargo.lock` 中 `MemoBox` 包
+- `src-tauri/Cargo.lock` 中 `NoteX` 包
 
-例如 `0.0.10 → 0.0.11 → 0.0.12`。`src-tauri/Cargo.lock` 仅同步 `MemoBox` 包自身版本，不升级依赖，也不修改 `pnpm-lock.yaml`。版本提交写入 `main`；`develop` 不要求另行提交版本改动，下一次合并仍会按最高正式版本递增。
+例如 `0.0.10 → 0.0.11 → 0.0.12`。`src-tauri/Cargo.lock` 仅同步 `NoteX` 包自身版本，不升级依赖，也不修改 `pnpm-lock.yaml`。版本提交写入 `main`；`develop` 不要求另行提交版本改动，下一次合并仍会按最高正式版本递增。
 
 本地 `pnpm release` 保留为独立的 Mac 打包命令，不是 GitHub 发版的前置步骤。若手动执行后再合并 PR，自动流程仍会在最高版本基础上再增加一次 patch。
 
