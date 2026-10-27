@@ -6,6 +6,7 @@
   "permissions": [
     "core:default",
     "clipboard-manager:allow-read-image",
+    "clipboard-manager:allow-write-text",
     "dialog:allow-open",
     "window-state:default"
   ]
