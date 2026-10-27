@@ -69,7 +69,7 @@ Get-FileHash .\NoteX_0.0.11_windows_x64-setup.exe -Algorithm SHA256
 工作流位于 [release.yml](../.github/workflows/release.yml)，发布校验逻辑位于 [github-release.mjs](../scripts/github-release.mjs)。
 
 1. **prepare** 校验四处正式版本号一致，自动分配 patch 并在草稿中记录原始推送来源，生成只变更版本文件的提交及 `v<版本号>` 标签。创建标签后显式将草稿重新绑定到正式标签，并校验 GitHub 返回结果，避免草稿变为 `untagged-*` 后阻止安装包上传；随后将版本同步回 `main`。若 `main` 已有新的开发提交，同步提交基于最新 `main`，保留其余代码；构建仍固定使用原始推送对应的版本快照。更新分支只允许快进，分支继续前进时重新读取并有限重试。
-2. **build** 使用 `pnpm install --frozen-lockfile` 安装依赖，并通过 `--locked` 固定 Rust 依赖。Windows x64 和 macOS Apple Silicon 都执行发布脚本回归测试，覆盖真实工作流入口的 ESM 加载；工作流统一使用 `pathToFileURL()`，支持 Windows 盘符和路径中的特殊字符。Apple Silicon job 运行完整前端检查；两个构建目标分别运行 rustfmt、Clippy、Rust 测试，再构建安装包。macOS 校验并挂载 DMG、验证应用签名并启动应用；Windows 静默安装 EXE 后启动已安装的应用，确认进程持续运行后才上传。任何一个目标失败都保留草稿。
+2. **build** 使用 `pnpm install --frozen-lockfile` 安装依赖，并通过 `--locked` 固定 Rust 依赖。Windows x64 和 macOS Apple Silicon 都执行发布脚本回归测试，覆盖真实工作流入口的 ESM 加载；工作流统一使用 `pathToFileURL()`，支持 Windows 盘符和路径中的特殊字符。Apple Silicon job 运行前端格式检查、lint 和测试；两个构建目标分别运行 rustfmt、Clippy、Rust 测试，再由 Tauri 的 `beforeBuildCommand: pnpm build` 执行前端类型检查与静态构建，每个平台只构建一次前端。macOS 校验并挂载 DMG、验证应用签名并启动应用；Windows 静默安装 EXE 后启动已安装的应用，确认进程持续运行后才上传。任何一个目标失败都保留草稿。
 3. **publish** 再次核对版本标签和推送提交，确认三个安装包上传完成、大小大于零且 GitHub 提供 SHA-256 摘要，将摘要写入 `SHA256SUMS.txt`，把草稿状态说明替换为正式下载表并公开 Release，保留自动生成的更新记录。随后逐一检查三个安装包与校验文件的公开链接，跟随重定向并对短暂 HTTP 错误有限重试；任何链接失败则任务失败，重跑已公开版本时只重验下载，不重复上传或发布。最新版由 GitHub 的版本排序规则确定，避免较旧版本稍后完成时覆盖较新版本的 Latest 标记。
 
 发布工作流串行排队，最多保留 100 个等待中的运行，避免多个推送同时分配相同版本。若较新的推送已经分配版本，旧推送的代码已被该版本包含，则跳过迟到的旧事件，避免将旧代码作为更高版本发布。
@@ -82,6 +82,22 @@ Get-FileHash .\NoteX_0.0.11_windows_x64-setup.exe -Algorithm SHA256
 
 首次启用后的验收需要以真实 GitHub Actions 运行和下载产物为准：本机测试不能替代 Windows 和 macOS Apple Silicon 的远程构建及最终安装验收。
 
+## CI 缓存与耗时排查
+
+前端沿用 `actions/setup-node` 的 pnpm store 缓存，缓存键使用根目录的 `pnpm-lock.yaml`。缓存命中后仍执行 `pnpm install --frozen-lockfile`，恢复依赖链接，不跳过安装。
+
+Rust 工具链固定为最近一次 Windows 与 macOS 成功发布使用的稳定版 `1.99.1`，避免滚动的 `stable` 更新使编译缓存失效。后续更新工具链时，在工作流中显式修改版本并验证两个原生平台，不修改应用依赖或锁文件。
+
+`Swatinem/rust-cache@v2` 在工具链安装完成后恢复 Cargo 依赖与 `src-tauri/target` 中的依赖编译产物，覆盖检查、测试和 release 构建。缓存按目标架构区分，Action 自动纳入操作系统、Rust 编译器及依赖配置；不额外加入提交 SHA 或应用版本号，使仅修改应用源码或自动递增版本的发布继续复用依赖缓存。缓存命中后仍完整运行检查、测试、构建和安装启动验证。
+
+首次成功构建建立缓存，后续运行才能评估热缓存效果。rustfmt、Clippy 与 Rust 测试拆为独立步骤，可直接在 Actions 中比较各步骤耗时。排查时记录：
+
+1. `Cache Rust dependencies` 的缓存命中状态与恢复耗时，以及 job 结束时的缓存保存耗时。
+2. `Lint Rust on the native platform`、`Test Rust on the native platform` 与 `Build installers` 的耗时。
+3. 先比较一次建立缓存的运行与后续两次命中缓存的运行，按相同平台分别统计；整条发布流程由较慢的平台决定。
+
+缓存效果需要以真实 Actions 运行验证，不预设加速比例。若热缓存后仍有大量重复依赖编译，再评估 sccache；当前先使用一套 Rust 缓存机制。发布继续串行排队，不通过取消进行中的发布来缩短等待。
+
 ## 参考
 
 - [Tauri GitHub Actions 发布指南](https://v2.tauri.app/distribute/pipelines/github/)
@@ -90,3 +106,5 @@ Get-FileHash .\NoteX_0.0.11_windows_x64-setup.exe -Algorithm SHA256
 - [GitHub PR 合并事件](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#running-your-workflow-when-a-pull-request-merges)
 - [GitHub Release Asset API 与摘要](https://docs.github.com/en/rest/releases/assets)
 - [GitHub Actions 并发队列](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)
+- [setup-node 依赖缓存](https://github.com/actions/setup-node/blob/v6/docs/advanced-usage.md#caching-packages-data)
+- [Rust 缓存配置](https://github.com/Swatinem/rust-cache)
