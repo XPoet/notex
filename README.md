@@ -4,27 +4,14 @@ NoteX 是一款本地笔记桌面应用。项目使用 Tauri 2、Vue 3、TypeScr
 
 ## 下载安装
 
-首次自动发布成功后，可从 本仓库 GitHub Releases 最新版本页面 的 **Assets** 直接下载安装包，无需安装开发环境：
+可从本仓库 [GitHub Releases](https://github.com/XPoet/notex/releases) 最新版本页面 的 **Assets** 直接下载安装包，无需安装开发环境：
 
 | 平台                          | 安装包                                                                                     |
 | ----------------------------- | ------------------------------------------------------------------------------------------ |
 | Windows x64                   | `NoteX_<版本号>_windows_x64-setup.exe`，或用于 MSI 安装的 `NoteX_<版本号>_windows_x64.msi` |
 | macOS Apple Silicon（M 系列） | `NoteX_<版本号>_macos_aarch64.dmg`                                                         |
 
-自动发布不再构建 macOS Intel 安装包。
-
 Windows 运行 EXE 或 MSI 安装；macOS 打开 DMG，将 NoteX 拖入“应用程序”。当前 Windows 安装包未配置代码签名证书，macOS 使用 ad-hoc 签名且未经 Apple 公证，首次安装或启动可能出现系统安全提示。安装说明、校验方法和发布启用步骤见 [发布指南](docs/RELEASE.md)。
-
-## 项目特点
-
-- 本地优先：业务数据、图片资源、日志和配置均保存在系统应用数据目录，不依赖网络、CDN 或远程字体。
-- 拖拽分类：按住笔记列表中的笔记，拖入左侧分类或“未分类”即可移动。
-- 灵活分栏：笔记列表与编辑器可拖动分隔条调整宽度。
-- 关闭时静默备份：保存当前草稿后，在后台将全部分类、子分类和未分类笔记及关联图片压缩到应用数据目录的 `backups/NoteX-latest.zip`，本地只保留最新一份备份。
-- 分层架构：`Vue → Service / Pinia → Tauri Command → Rust Service → Repository → SQLite / 文件系统`。
-- 安全初始化：启动时创建固定目录，启用 SQLite 外键、WAL、NORMAL synchronous 与 5 秒 busy timeout，并以事务执行 Migration。
-- 最小权限：当前 Capability 仅授予主窗口 `core:default`，不开放 Shell、HTTP 或任意文件系统权限。
-- 工程质量：使用 Oxfmt、Oxlint、vue-tsc、Vitest、rustfmt、Clippy 与 Cargo Test 进行检查。
 
 ## 技术栈
 
@@ -90,14 +77,6 @@ pnpm tauri:dev
 4. 应用 V001 Migration，并向前端返回数据目录与结构版本。
 
 初始化失败时，应用显示安全诊断与重试入口；不会把 SQL、数据库绝对路径或笔记内容暴露给界面。
-
-## 关闭时自动备份
-
-点击窗口关闭按钮，或通过系统菜单、退出快捷键关闭应用时，NoteX 会先保存当前编辑内容，再隐藏窗口，在后台生成 ZIP 压缩文件，完成后退出进程。此功能在工作台、设置和其他页面均生效，无需选择目录或确认。
-
-备份固定存放在应用数据目录的 `backups/NoteX-latest.zip`。可在设置页点击“打开数据目录”，进入 `backups` 文件夹查看。ZIP 内按分类层级保存 Markdown，未分类笔记放入“未分类”目录，关联图片集中放入 `assets`，Markdown 图片链接使用相对路径；回收站笔记不参与备份。它是 Markdown 和图片导出文件，不是包含标签、设置等数据的数据库恢复包。
-
-每次成功生成并写入完整 ZIP 后，才替换上一份备份。遇到磁盘不可写、资源缺失等导出错误时，静默保留上一份完整备份并退出；当前笔记保存失败则保留窗口，提示重试。强制结束进程、崩溃或断电无法保证执行关闭备份。
 
 ## 常用命令
 
@@ -213,6 +192,5 @@ tests/               前端单元与组件测试
 
 - 数据库结构以 [docs/DATABASE.md](docs/DATABASE.md) 为准；结构变更必须先更新该文档，再新增 Migration。
 - Tauri Command 与前后端 DTO 以 [docs/IPC.md](docs/IPC.md) 为准；Vue 组件不得直接调用 `invoke()`。
-- 实施顺序、任务状态、风险与验证证据以 [docs/development-plan.md](docs/development-plan.md) 为准。
 - 不得通过删除数据库或临时执行 DDL 代替 Migration；已发布 Migration 不得修改。
 - 前端不得读取应用数据目录或执行 SQL；数据库和文件系统仅由 Rust 管理。
