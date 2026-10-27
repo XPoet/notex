@@ -2,6 +2,7 @@
 import {
   Calendar,
   Clock,
+  CopyDocument,
   Delete,
   Download,
   Folder,
@@ -10,10 +11,12 @@ import {
   StarFilled,
 } from '@element-plus/icons-vue'
 import { computed, useTemplateRef, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import EditorStatusBar from './EditorStatusBar.vue'
 import MarkdownEditor from './MarkdownEditor.vue'
 import MissingAssetNotice from './MissingAssetNotice.vue'
 import NoteMetadata from './NoteMetadata.vue'
+import { copyText } from '@/services/clipboard'
 import type { CategoryNode } from '@/types/categories'
 import type { SaveStatus as SaveStatusType } from '@/stores/notes'
 import type { NoteDetail } from '@/types/notes'
@@ -99,6 +102,17 @@ function focusEditor(): void {
   markdownEditor.value?.focus()
 }
 
+async function copyContent(): Promise<void> {
+  if (props.note === undefined) return
+
+  try {
+    await copyText(props.note.content)
+    ElMessage.success('笔记内容已复制。')
+  } catch {
+    ElMessage.error('复制失败，请重试。')
+  }
+}
+
 defineExpose({ focusEditor })
 </script>
 
@@ -137,6 +151,14 @@ defineExpose({ focusEditor })
             <time :datetime="note.updatedAt">{{ updatedLabel }}</time>
           </p>
           <div class="note-editor-actions">
+            <el-button
+              text
+              circle
+              :icon="CopyDocument"
+              title="复制笔记内容"
+              aria-label="复制笔记内容"
+              @click="copyContent"
+            />
             <el-button
               text
               circle

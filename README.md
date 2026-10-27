@@ -165,6 +165,20 @@ pnpm exec tauri build --debug
 
 该命令用于开发阶段验证当前平台的原生编译和打包链路。
 
+### macOS 应用图标
+
+macOS 打包使用 `src-tauri/icons/icon.icns`，专用源文件为 `src-tauri/icons/macos.svg`。画布为 1024×1024 像素，居中的图标主体为 824×824 像素，四边各保留 100 像素透明留白，使 Launchpad 和 Dock 中的视觉尺寸与 macOS 系统应用一致。修改图标时同步更新该源文件中的 NoteX 标识。
+
+在仓库根目录执行以下命令重新生成 macOS 图标：
+
+```bash
+notex_icon_output="$(mktemp -d)"
+pnpm exec tauri icon src-tauri/icons/macos.svg --output "$notex_icon_output"
+cp "$notex_icon_output/icon.icns" src-tauri/icons/icon.icns
+```
+
+生成的 `.icns` 包含 16、32、128、256、512 点各自的 1× 和 2× 图像，最大分辨率为 1024×1024 像素，符合 [Apple 的 iconset 尺寸规范](https://developer.apple.com/library/archive/documentation/Xcode/Reference/xcode_ref-Asset_Catalog_Format/IconSetType.html)。macOS 的透明留白仅用于该 `.icns`；不要将临时目录中的其他平台图标复制回仓库。
+
 ### macOS 自用 DMG
 
 ```bash
