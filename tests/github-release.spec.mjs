@@ -242,6 +242,14 @@ function fixture() {
 }
 
 describe('GitHub 自动发布', () => {
+  it('发布清单只包含 Windows 和 Apple Silicon 的三个安装包', () => {
+    expect(expectedAssets(version)).toEqual([
+      `NoteX_${version}_windows_x64-setup.exe`,
+      `NoteX_${version}_windows_x64.msi`,
+      `NoteX_${version}_macos_aarch64.dmg`,
+    ])
+  })
+
   it('使用四个版本文件的共同版本，不修改源文件', () => {
     const { root } = fixture()
     const before = readFileSync(join(root, 'package.json'), 'utf8')
@@ -594,7 +602,6 @@ describe('GitHub 自动发布', () => {
       [0, 1],
     ],
     ['aarch64-apple-darwin', [['dmg', 'test.dmg']], [2]],
-    ['x86_64-apple-darwin', [['dmg', 'test.dmg']], [3]],
   ])('上传 %s 的安装包，并验证上传摘要', async (target, bundles, indexes) => {
     const args = fixture()
     args.assets.length = 0
@@ -609,6 +616,15 @@ describe('GitHub 自动发布', () => {
     )
     expect(uploadedNames).toEqual(indexes.map((index) => expectedAssets(version)[index]))
     expect(args.github.rest.repos.updateRelease).not.toHaveBeenCalled()
+  })
+
+  it('拒绝上传 macOS Intel 安装包', async () => {
+    const args = fixture()
+    await expect(uploadInstallers({ ...args, target: 'x86_64-apple-darwin' })).rejects.toThrow(
+      '不支持的安装包构建目标',
+    )
+    expect(args.github.rest.repos.getRelease).not.toHaveBeenCalled()
+    expect(args.github.rest.repos.uploadReleaseAsset).not.toHaveBeenCalled()
   })
 
   it('完整附件存在时直接复用，不读取新构建或重新上传', async () => {
@@ -669,11 +685,21 @@ describe('GitHub 自动发布', () => {
     },
   )
 
-  it.each(['missing', 'empty', 'unfinished', 'no-digest'])(
+  it.each(expectedAssets(version))('缺少 %s 时保持草稿，不上传校验文件或发布', async (name) => {
+    const args = fixture()
+    args.assets.splice(
+      args.assets.findIndex((asset) => asset.name === name),
+      1,
+    )
+    await expect(publishRelease(args)).rejects.toThrow('保持草稿状态')
+    expect(args.github.rest.repos.uploadReleaseAsset).not.toHaveBeenCalled()
+    expect(args.github.rest.repos.updateRelease).not.toHaveBeenCalled()
+  })
+
+  it.each(['empty', 'unfinished', 'no-digest'])(
     '任一安装包 %s 时保持草稿，不上传校验文件或发布',
     async (scenario) => {
       const args = fixture()
-      if (scenario === 'missing') args.assets.pop()
       if (scenario === 'empty') args.assets[0].size = 0
       if (scenario === 'unfinished') args.assets[0].state = 'starter'
       if (scenario === 'no-digest') args.assets[0].digest = null
@@ -683,7 +709,7 @@ describe('GitHub 自动发布', () => {
     },
   )
 
-  it('四个安装包齐全后生成校验文件，再公开发布', async () => {
+  it('三个安装包齐全后生成校验文件，再公开发布', async () => {
     const args = fixture()
     await publishRelease(args)
     const upload = args.github.rest.repos.uploadReleaseAsset
@@ -701,6 +727,10 @@ describe('GitHub 自动发布', () => {
     expect(args.release.draft).toBe(false)
     expect(args.release.body).toContain("## What's Changed\nRelease notes")
     expect(args.release.body).not.toContain('安装包正在构建')
+    expect(args.release.body).not.toContain('macOS Intel')
+    for (const name of expectedAssets(version)) {
+      expect(args.release.body).toContain(name)
+    }
     for (const name of [...expectedAssets(version), 'SHA256SUMS.txt']) {
       expect(args.fetchUrl).toHaveBeenCalledWith(
         `https://github.com/XPoet/notex/releases/download/v${version}/${name}`,
@@ -721,7 +751,7 @@ describe('GitHub 自动发布', () => {
     args.fetchUrl.mockResolvedValue({ ok: true, status: 200 })
     await publishRelease(args)
     expect(args.github.rest.repos.updateRelease).toHaveBeenCalledOnce()
-    expect(args.fetchUrl).toHaveBeenCalledTimes(9)
+    expect(args.fetchUrl).toHaveBeenCalledTimes(8)
     expect(args.wait).toHaveBeenCalledTimes(3)
   })
 
@@ -729,7 +759,7 @@ describe('GitHub 自动发布', () => {
     const args = fixture()
     args.fetchUrl.mockResolvedValueOnce({ ok: false, status: 404 })
     await publishRelease(args)
-    expect(args.fetchUrl).toHaveBeenCalledTimes(6)
+    expect(args.fetchUrl).toHaveBeenCalledTimes(5)
     expect(args.wait).toHaveBeenCalledWith(3000)
   })
 

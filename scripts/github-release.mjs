@@ -49,7 +49,6 @@ export function expectedAssets(version) {
     `NoteX_${version}_windows_x64-setup.exe`,
     `NoteX_${version}_windows_x64.msi`,
     `NoteX_${version}_macos_aarch64.dmg`,
-    `NoteX_${version}_macos_x64.dmg`,
   ]
 }
 
@@ -190,7 +189,6 @@ function downloadsTable(version, context) {
     '| --- | --- |',
     `| Windows x64 | [安装程序 EXE](${base}/${assets[0]}) · [MSI](${base}/${assets[1]}) |`,
     `| macOS Apple Silicon（M 系列） | [DMG](${base}/${assets[2]}) |`,
-    `| macOS Intel | [DMG](${base}/${assets[3]}) |`,
   ].join('\n')
 }
 
@@ -380,7 +378,6 @@ export async function uploadInstallers({
       ['msi', '.msi', names[1]],
     ],
     'aarch64-apple-darwin': [['dmg', '.dmg', names[2]]],
-    'x86_64-apple-darwin': [['dmg', '.dmg', names[3]]],
   }
   const installers = targets[target]
   if (!Object.hasOwn(targets, target)) throw new Error('不支持的安装包构建目标。')

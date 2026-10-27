@@ -10,7 +10,8 @@ NoteX 是一款本地笔记桌面应用。项目使用 Tauri 2、Vue 3、TypeScr
 | ----------------------------- | ------------------------------------------------------------------------------------------ |
 | Windows x64                   | `NoteX_<版本号>_windows_x64-setup.exe`，或用于 MSI 安装的 `NoteX_<版本号>_windows_x64.msi` |
 | macOS Apple Silicon（M 系列） | `NoteX_<版本号>_macos_aarch64.dmg`                                                         |
-| macOS Intel                   | `NoteX_<版本号>_macos_x64.dmg`                                                             |
+
+自动发布不再构建 macOS Intel 安装包。
 
 Windows 运行 EXE 或 MSI 安装；macOS 打开 DMG，将 NoteX 拖入“应用程序”。当前 Windows 安装包未配置代码签名证书，macOS 使用 ad-hoc 签名且未经 Apple 公证，首次安装或启动可能出现系统安全提示。安装说明、校验方法和发布启用步骤见 [发布指南](docs/RELEASE.md)。
 
@@ -147,7 +148,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 ### GitHub 自动发布
 
-本仓库的 `develop` 分支通过 Pull Request 合并到 `main` 后，GitHub Actions 自动递增补丁版本，例如 `0.0.10 → 0.0.11`，同步四处 NoteX 自身版本，生成版本提交与标签并将版本提交回 `main`，随后构建 Windows x64（EXE、MSI）及 macOS（Apple Silicon、Intel）安装包。质量检查与全部构建成功、安装包完整性检查通过后，才公开 GitHub Release，并附上下载链接、自动生成的变更说明和 `SHA256SUMS.txt`。
+本仓库的 `develop` 分支通过 Pull Request 合并到 `main` 后，GitHub Actions 自动递增补丁版本，例如 `0.0.10 → 0.0.11`，同步四处 NoteX 自身版本，生成版本提交与标签并将版本提交回 `main`，随后构建 Windows x64（EXE、MSI）及 macOS Apple Silicon 安装包。质量检查与全部构建成功、安装包完整性检查通过后，才公开 GitHub Release，并附上下载链接、自动生成的变更说明和 `SHA256SUMS.txt`。
 
 日常发版只需推送 `develop` 并合并 PR，无需提前执行 `pnpm release` 或修改版本号。同一次合并的失败重跑复用已分配版本，不会重复递增；版本分配参考仓库、`main`、已有标签和草稿中的最高正式版本，避免连续合并时发生版本冲突。版本提交只更新 NoteX 自身版本，不升级依赖；`src-tauri/Cargo.lock` 仅同步 `NoteX` 包版本。
 
