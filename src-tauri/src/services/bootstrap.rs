@@ -19,7 +19,7 @@ impl BootstrapService {
 
     pub fn bootstrap(&self) -> Result<BootstrapSnapshot, BootstrapError> {
         self.create_required_directories()?;
-        let database_path = self.data_directory.join("database").join("memobox.db");
+        let database_path = self.data_directory.join("database").join("notex.db");
         let schema_version = BootstrapRepository::initialize(&database_path)?;
         BootstrapRepository::restore_recovery_drafts(&database_path, &current_time()?)?;
         SearchService::new(&self.data_directory)
@@ -77,7 +77,7 @@ mod tests {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |duration| duration.as_nanos());
-        std::env::temp_dir().join(format!("memo-box-bootstrap-{timestamp}"))
+        std::env::temp_dir().join(format!("notex-bootstrap-{timestamp}"))
     }
 
     #[test]
@@ -96,7 +96,7 @@ mod tests {
             assert!(data_directory.join(directory_name).is_dir());
         }
 
-        let database = Connection::open(data_directory.join("database").join("memobox.db"))?;
+        let database = Connection::open(data_directory.join("database").join("notex.db"))?;
         let migration_count: u32 =
             database.query_row("SELECT COUNT(*) FROM schema_migrations", [], |row| {
                 row.get(0)
@@ -128,7 +128,7 @@ mod tests {
         let restored = notes.get(&note.id)?;
         assert_eq!(restored.title, "恢复标题");
         assert_eq!(restored.content, "异常退出前的草稿");
-        let database = Connection::open(data_directory.join("database").join("memobox.db"))?;
+        let database = Connection::open(data_directory.join("database").join("notex.db"))?;
         let recovery_count: u32 = database.query_row(
             "SELECT COUNT(*) FROM recovery_drafts WHERE note_id = ?1",
             [&note.id],
@@ -150,7 +150,7 @@ mod tests {
         let data_directory = test_data_directory();
         let service = BootstrapService::new(data_directory.clone());
         service.bootstrap()?;
-        let database_path = data_directory.join("database").join("memobox.db");
+        let database_path = data_directory.join("database").join("notex.db");
         let mut database = Connection::open(&database_path)?;
         let transaction = database.transaction()?;
         for index in 0..10_000 {

@@ -45,6 +45,7 @@ const emit = defineEmits<{
         v-for="result in results"
         :key="result.id"
         :result="result"
+        :query="query"
         @open="emit('open', $event)"
       />
       <div v-if="hasNextPage" class="search-more">

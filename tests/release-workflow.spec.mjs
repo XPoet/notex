@@ -14,6 +14,11 @@ const scripts = [...workflow.matchAll(/^ {10}script: \|\n((?: {12}.*\n)+)/gm)].m
 )
 
 describe('发布工作流的原生脚本入口', () => {
+  it('仅构建 Windows x64 和 macOS Apple Silicon 安装包', () => {
+    const targets = [...workflow.matchAll(/^ {12}target: (.+)$/gm)].map((match) => match[1])
+    expect(targets).toEqual(['x86_64-pc-windows-msvc', 'aarch64-apple-darwin'])
+  })
+
   it('覆盖准备、上传和公开发布三个入口', () => {
     expect(scripts).toHaveLength(3)
   })
@@ -21,7 +26,7 @@ describe('发布工作流的原生脚本入口', () => {
   it.each(['prepareRelease', 'uploadInstallers', 'publishRelease'])(
     '%s 在当前平台及含特殊字符的工作区中加载 ESM 并传递发布参数',
     (name) => {
-      const root = mkdtempSync(join(tmpdir(), 'memo-box release #%-'))
+      const root = mkdtempSync(join(tmpdir(), 'notex release #%-'))
       mkdirSync(join(root, 'scripts'))
       writeFileSync(
         join(root, 'scripts/github-release.mjs'),

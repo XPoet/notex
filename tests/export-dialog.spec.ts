@@ -58,7 +58,7 @@ describe('ExportDialog', () => {
     exportService.chooseExportDirectory.mockResolvedValue('/private/export-target')
     exportService.exportNotes.mockResolvedValue({
       jobId: '118de0d6-6a4c-4f1e-bef1-5f0878069a8a',
-      directoryLabel: 'MemoBox 导出-20260728-173000',
+      directoryLabel: 'NoteX 导出-20260728-173000',
       exportedCount: 1,
       failedCount: 0,
       cancelled: false,
@@ -102,7 +102,7 @@ describe('ExportDialog', () => {
       noteSort: 'updatedAt',
       editorFontSize: 15,
       showCategoryCounts: true,
-      dataDirectory: '/Users/example/Library/Application Support/cn.xpoet.memobox',
+      dataDirectory: '/Users/example/Library/Application Support/cn.xpoet.notex',
       defaultExportDirectory: '/Users/example/Desktop',
       hasCustomDefaultExportDirectory: false,
       appVersion: '0.1.0',

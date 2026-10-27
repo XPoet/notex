@@ -1,12 +1,11 @@
-# MemoBox 数据库契约
+# NoteX 数据库契约
 
 > 契约版本：V005
 > 最后更新：2026-07-24
-> 生效任务：T02～T10 本地数据、笔记、图片、回收站、分类、标签、全局搜索、导出与本地偏好闭环
 
 ## 1. 存储位置与连接约束
 
-- 数据库固定存放在 Tauri 系统应用数据目录的 `database/memobox.db`；前端不得传入或读取该路径。
+- 数据库固定存放在 Tauri 系统应用数据目录的 `database/notex.db`；前端不得传入或读取该路径。
 - 启动连接必须启用 `foreign_keys = ON`、`journal_mode = WAL`、`synchronous = NORMAL` 和 `busy_timeout = 5000`。
 - 所有结构变更必须新增只增不改的 `src-tauri/migrations/VNNN__*.sql`；单个迁移与迁移记录写入同一事务。
 - 迁移执行失败时，应用进入诊断状态，不得继续正常业务。

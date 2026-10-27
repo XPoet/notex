@@ -40,7 +40,7 @@ async function mountWorkbench(query: Record<string, string> = {}) {
     noteSort: 'updatedAt',
     editorFontSize: 15,
     showCategoryCounts: true,
-    dataDirectory: '/private/memobox-test',
+    dataDirectory: '/private/notex-test',
     defaultExportDirectory: '/private/export-target',
     hasCustomDefaultExportDirectory: true,
     appVersion: '0.0.9',
@@ -91,7 +91,7 @@ describe('工作台导出范围', () => {
     }
     exportService.exportNotes.mockResolvedValue({
       jobId: 'job',
-      directoryLabel: 'MemoBox 导出',
+      directoryLabel: 'NoteX 导出',
       exportedCount: 2,
       failedCount: 0,
       cancelled: false,

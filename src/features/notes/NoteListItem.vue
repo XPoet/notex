@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { StarFilled } from '@element-plus/icons-vue'
 import { computed, shallowRef } from 'vue'
+import HighlightedText from '@/components/HighlightedText.vue'
 import { NOTE_DRAG_TYPE, type NoteSummary } from '@/types/notes'
 
 const props = defineProps<{
   note: NoteSummary
   selected: boolean
+  searchQuery?: string
 }>()
 
 const emit = defineEmits<{
@@ -40,18 +42,16 @@ const displayTitle = computed(() => {
     @dragend="isDragging = false"
   >
     <span class="note-list-item-title-row">
-      <span class="note-list-item-title">{{ displayTitle }}</span>
+      <span class="note-list-item-title">
+        <HighlightedText :text="displayTitle" :query="searchQuery" />
+      </span>
       <el-icon v-if="note.isPinned" class="note-list-item-pin">
         <StarFilled />
       </el-icon>
     </span>
-    <span
-      class="note-list-item-content"
-      :class="{ 'note-list-item-content--tagged': note.tagNames.length > 0 }"
-    >
-      <span class="note-list-item-preview">{{ note.contentPreview || '尚未记录内容' }}</span>
-      <span v-if="note.tagNames.length > 0" class="note-list-item-tags">
-        {{ note.tagNames.map((x) => `#${x}`).join(' ') }}
+    <span class="note-list-item-content">
+      <span class="note-list-item-preview">
+        <HighlightedText :text="note.contentPreview || '尚未记录内容'" :query="searchQuery" />
       </span>
     </span>
   </button>
@@ -135,29 +135,11 @@ const displayTitle = computed(() => {
   line-height: 1.5;
 }
 
-.note-list-item-tags {
-  min-inline-size: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--color-accent-active);
-  font-size: 0.625rem;
-  line-height: 14px;
-}
-
 .note-list-item-content {
   display: grid;
   grid-template-rows: minmax(0, 1fr);
   gap: var(--space-4);
   min-inline-size: 0;
   min-block-size: 0;
-}
-
-.note-list-item-content--tagged {
-  grid-template-rows: minmax(0, 1fr) auto;
-}
-
-.note-list-item-content--tagged .note-list-item-preview {
-  -webkit-line-clamp: 1;
 }
 </style>

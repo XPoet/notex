@@ -119,7 +119,7 @@ function isEditorFontSize(value: number): value is 14 | 15 | 16 | 17 | 18 {
     <article class="settings-group settings-group--about">
       <header>
         <div>
-          <h2>关于 MemoBox</h2>
+          <h2>关于 NoteX</h2>
           <p>所有数据仅保存在此设备。</p>
         </div>
       </header>

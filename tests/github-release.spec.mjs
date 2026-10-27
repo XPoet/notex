@@ -24,7 +24,7 @@ const versionPaths = [
 ]
 
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), 'memo-box-github-release-'))
+  const root = mkdtempSync(join(tmpdir(), 'notex-github-release-'))
   mkdirSync(join(root, 'src-tauri'))
   writeFileSync(join(root, 'package.json'), `${JSON.stringify({ version }, null, 2)}\n`)
   writeFileSync(
@@ -33,19 +33,19 @@ function fixture() {
   )
   writeFileSync(
     join(root, 'src-tauri/Cargo.toml'),
-    `[package]\nname = "MemoBox"\nversion = "${version}"\n\n[dependencies]\nother = "1"\n`,
+    `[package]\nname = "NoteX"\nversion = "${version}"\n\n[dependencies]\nother = "1"\n`,
   )
   writeFileSync(
     join(root, 'src-tauri/Cargo.lock'),
-    `version = 4\n\n[[package]]\nname = "MemoBox"\nversion = "${version}"\n\n[[package]]\nname = "other"\nversion = "1.0.0"\n`,
+    `version = 4\n\n[[package]]\nname = "NoteX"\nversion = "${version}"\n\n[[package]]\nname = "other"\nversion = "1.0.0"\n`,
   )
   const release = {
     id: 123,
     tag_name: `v${version}`,
     target_commitish: snapshotSha,
-    body: `<!-- memobox-release-source: ${sha} -->\n\n<!-- memobox-downloads:start -->\n安装包正在构建或校验\n<!-- memobox-downloads:end -->\n\n## What's Changed\nRelease notes`,
+    body: `<!-- notex-release-source: ${sha} -->\n\n<!-- notex-downloads:start -->\n安装包正在构建或校验\n<!-- notex-downloads:end -->\n\n## What's Changed\nRelease notes`,
     draft: true,
-    html_url: `https://github.com/XPoet/memo-box/releases/tag/v${version}`,
+    html_url: `https://github.com/XPoet/notex/releases/tag/v${version}`,
   }
   const assets = expectedAssets(version).map((name) => ({
     name,
@@ -74,7 +74,7 @@ function fixture() {
       snapshotSha,
       {
         sha: snapshotSha,
-        message: `chore(release): v${version}\n\nMemoBox-Release-Source: ${sha}`,
+        message: `chore(release): v${version}\n\nNoteX-Release-Source: ${sha}`,
         tree: { sha: 'snapshot-tree' },
         parents: [{ sha }],
         committer: { date },
@@ -209,14 +209,14 @@ function fixture() {
     paginate: vi.fn(async (method, args) => (await method(args)).data),
   }
   const context = {
-    repo: { owner: 'XPoet', repo: 'memo-box' },
+    repo: { owner: 'XPoet', repo: 'notex' },
     serverUrl: 'https://github.com',
     payload: {
       pull_request: {
         merged: true,
         merge_commit_sha: sha,
         base: { ref: 'main' },
-        head: { ref: 'develop', repo: { full_name: 'XPoet/memo-box' } },
+        head: { ref: 'develop', repo: { full_name: 'XPoet/notex' } },
       },
     },
   }
@@ -242,6 +242,14 @@ function fixture() {
 }
 
 describe('GitHub 自动发布', () => {
+  it('发布清单只包含 Windows 和 Apple Silicon 的三个安装包', () => {
+    expect(expectedAssets(version)).toEqual([
+      `NoteX_${version}_windows_x64-setup.exe`,
+      `NoteX_${version}_windows_x64.msi`,
+      `NoteX_${version}_macos_aarch64.dmg`,
+    ])
+  })
+
   it('使用四个版本文件的共同版本，不修改源文件', () => {
     const { root } = fixture()
     const before = readFileSync(join(root, 'package.json'), 'utf8')
@@ -275,7 +283,7 @@ describe('GitHub 自动发布', () => {
       if (scenario === 'closed') pr.merged = false
       if (scenario === 'other-head') pr.head.ref = 'feature'
       if (scenario === 'other-base') pr.base.ref = 'develop'
-      if (scenario === 'fork') pr.head.repo.full_name = 'other/memo-box'
+      if (scenario === 'fork') pr.head.repo.full_name = 'other/notex'
       if (scenario === 'missing-sha') pr.merge_commit_sha = ''
       await expect(prepareRelease(args)).rejects.toThrow('只允许发布')
       expect(args.github.rest.git.getRef).not.toHaveBeenCalled()
@@ -299,7 +307,7 @@ describe('GitHub 自动发布', () => {
     expect(snapshot.files['package.json']).toContain('"version": "0.0.11"')
     expect(snapshot.files['src-tauri/tauri.conf.json']).toContain('"version": "0.0.11"')
     expect(snapshot.files['src-tauri/Cargo.toml']).toContain('version = "0.0.11"')
-    expect(snapshot.files['src-tauri/Cargo.lock']).toContain('name = "MemoBox"\nversion = "0.0.11"')
+    expect(snapshot.files['src-tauri/Cargo.lock']).toContain('name = "NoteX"\nversion = "0.0.11"')
     expect(snapshot.files['src-tauri/Cargo.lock']).toContain('name = "other"\nversion = "1.0.0"')
     expect(snapshot.files['src/feature.txt']).toBe('original application code')
     expect(
@@ -382,7 +390,7 @@ describe('GitHub 自动发布', () => {
     const args = fixture()
     Object.assign(args.release, {
       tag_name: 'untagged-abc123',
-      name: `MemoBox v${version}`,
+      name: `NoteX v${version}`,
     })
     args.releases.push(args.release)
     if (scenario === 'target') args.release.target_commitish = otherSha
@@ -555,7 +563,7 @@ describe('GitHub 自动发布', () => {
     const args = fixture()
     args.releases.push({
       tag_name: 'v0.0.12',
-      body: '<!-- memobox-release-source: ' + otherSha + ' -->',
+      body: '<!-- notex-release-source: ' + otherSha + ' -->',
       draft: true,
     })
     args.github.rest.repos.compareCommits.mockResolvedValue({ data: { status: 'ahead' } })
@@ -569,7 +577,7 @@ describe('GitHub 自动发布', () => {
     const args = fixture()
     args.releases.push({
       tag_name: 'v0.0.12',
-      body: '<!-- memobox-release-source: ' + otherSha + ' -->',
+      body: '<!-- notex-release-source: ' + otherSha + ' -->',
       draft: false,
     })
     args.github.rest.repos.compareCommits.mockResolvedValue({ data: { status: 'diverged' } })
@@ -594,7 +602,6 @@ describe('GitHub 自动发布', () => {
       [0, 1],
     ],
     ['aarch64-apple-darwin', [['dmg', 'test.dmg']], [2]],
-    ['x86_64-apple-darwin', [['dmg', 'test.dmg']], [3]],
   ])('上传 %s 的安装包，并验证上传摘要', async (target, bundles, indexes) => {
     const args = fixture()
     args.assets.length = 0
@@ -609,6 +616,15 @@ describe('GitHub 自动发布', () => {
     )
     expect(uploadedNames).toEqual(indexes.map((index) => expectedAssets(version)[index]))
     expect(args.github.rest.repos.updateRelease).not.toHaveBeenCalled()
+  })
+
+  it('拒绝上传 macOS Intel 安装包', async () => {
+    const args = fixture()
+    await expect(uploadInstallers({ ...args, target: 'x86_64-apple-darwin' })).rejects.toThrow(
+      '不支持的安装包构建目标',
+    )
+    expect(args.github.rest.repos.getRelease).not.toHaveBeenCalled()
+    expect(args.github.rest.repos.uploadReleaseAsset).not.toHaveBeenCalled()
   })
 
   it('完整附件存在时直接复用，不读取新构建或重新上传', async () => {
@@ -669,11 +685,21 @@ describe('GitHub 自动发布', () => {
     },
   )
 
-  it.each(['missing', 'empty', 'unfinished', 'no-digest'])(
+  it.each(expectedAssets(version))('缺少 %s 时保持草稿，不上传校验文件或发布', async (name) => {
+    const args = fixture()
+    args.assets.splice(
+      args.assets.findIndex((asset) => asset.name === name),
+      1,
+    )
+    await expect(publishRelease(args)).rejects.toThrow('保持草稿状态')
+    expect(args.github.rest.repos.uploadReleaseAsset).not.toHaveBeenCalled()
+    expect(args.github.rest.repos.updateRelease).not.toHaveBeenCalled()
+  })
+
+  it.each(['empty', 'unfinished', 'no-digest'])(
     '任一安装包 %s 时保持草稿，不上传校验文件或发布',
     async (scenario) => {
       const args = fixture()
-      if (scenario === 'missing') args.assets.pop()
       if (scenario === 'empty') args.assets[0].size = 0
       if (scenario === 'unfinished') args.assets[0].state = 'starter'
       if (scenario === 'no-digest') args.assets[0].digest = null
@@ -683,7 +709,7 @@ describe('GitHub 自动发布', () => {
     },
   )
 
-  it('四个安装包齐全后生成校验文件，再公开发布', async () => {
+  it('三个安装包齐全后生成校验文件，再公开发布', async () => {
     const args = fixture()
     await publishRelease(args)
     const upload = args.github.rest.repos.uploadReleaseAsset
@@ -701,9 +727,13 @@ describe('GitHub 自动发布', () => {
     expect(args.release.draft).toBe(false)
     expect(args.release.body).toContain("## What's Changed\nRelease notes")
     expect(args.release.body).not.toContain('安装包正在构建')
+    expect(args.release.body).not.toContain('macOS Intel')
+    for (const name of expectedAssets(version)) {
+      expect(args.release.body).toContain(name)
+    }
     for (const name of [...expectedAssets(version), 'SHA256SUMS.txt']) {
       expect(args.fetchUrl).toHaveBeenCalledWith(
-        `https://github.com/XPoet/memo-box/releases/download/v${version}/${name}`,
+        `https://github.com/XPoet/notex/releases/download/v${version}/${name}`,
         expect.objectContaining({ method: 'HEAD', redirect: 'follow' }),
       )
     }
@@ -721,7 +751,7 @@ describe('GitHub 自动发布', () => {
     args.fetchUrl.mockResolvedValue({ ok: true, status: 200 })
     await publishRelease(args)
     expect(args.github.rest.repos.updateRelease).toHaveBeenCalledOnce()
-    expect(args.fetchUrl).toHaveBeenCalledTimes(9)
+    expect(args.fetchUrl).toHaveBeenCalledTimes(8)
     expect(args.wait).toHaveBeenCalledTimes(3)
   })
 
@@ -729,7 +759,7 @@ describe('GitHub 自动发布', () => {
     const args = fixture()
     args.fetchUrl.mockResolvedValueOnce({ ok: false, status: 404 })
     await publishRelease(args)
-    expect(args.fetchUrl).toHaveBeenCalledTimes(6)
+    expect(args.fetchUrl).toHaveBeenCalledTimes(5)
     expect(args.wait).toHaveBeenCalledWith(3000)
   })
 

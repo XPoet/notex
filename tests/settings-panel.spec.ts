@@ -11,7 +11,7 @@ describe('SettingsPanel', () => {
           noteSort: 'updatedAt',
           editorFontSize: 15,
           showCategoryCounts: true,
-          dataDirectory: '/Users/example/Library/Application Support/cn.xpoet.memobox',
+          dataDirectory: '/Users/example/Library/Application Support/cn.xpoet.notex',
           defaultExportDirectory: '/Users/example/Desktop',
           hasCustomDefaultExportDirectory: false,
           appVersion: '0.1.0',
@@ -31,7 +31,7 @@ describe('SettingsPanel', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('/Users/example/Library/Application Support/cn.xpoet.memobox')
+    expect(wrapper.text()).toContain('/Users/example/Library/Application Support/cn.xpoet.notex')
     expect(wrapper.text()).toContain('/Users/example/Desktop')
     expect(wrapper.text()).not.toContain('显示分类笔记数量')
     expect(wrapper.find('el-switch-stub').exists()).toBe(false)

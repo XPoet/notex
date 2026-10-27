@@ -3,7 +3,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 /** 所有页面共用关闭入口，覆盖窗口关闭与系统菜单退出。 */
 export function onExitRequested(handler: () => Promise<void>): Promise<UnlistenFn> {
-  return listen('memo-box-exit-requested', () => {
+  return listen('notex-exit-requested', () => {
     void handler()
   })
 }

@@ -314,8 +314,8 @@ mod tests {
     #[test]
     fn builds_phrase_based_and_expression_for_chinese_and_english() {
         assert_eq!(
-            SearchRepository::build_expression(&["本地数据", "Memo-Box 2026"]),
-            Some("\"本 地 数 据\" AND \"memo box 2026\"".to_owned()),
+            SearchRepository::build_expression(&["本地数据", "Note-X 2026"]),
+            Some("\"本 地 数 据\" AND \"note x 2026\"".to_owned()),
         );
     }
 }

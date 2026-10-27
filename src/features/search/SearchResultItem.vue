@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { Folder } from '@element-plus/icons-vue'
 import { computed } from 'vue'
+import HighlightedText from '@/components/HighlightedText.vue'
 import type { SearchResult } from '@/types/search'
 
 const props = defineProps<{
   result: SearchResult
+  query?: string
 }>()
 
 const emit = defineEmits<{
@@ -25,14 +27,20 @@ const updatedLabel = computed(() =>
 <template>
   <button class="search-result-item" type="button" @click="emit('open', result.id)">
     <span class="search-result-title-row">
-      <strong class="search-result-title">{{ displayTitle }}</strong>
+      <strong class="search-result-title">
+        <HighlightedText :text="displayTitle" :query="query" />
+      </strong>
       <time class="search-result-time" :datetime="result.updatedAt">{{ updatedLabel }}</time>
     </span>
-    <span class="search-result-preview">{{ result.contentPreview || '没有正文内容' }}</span>
+    <span class="search-result-preview">
+      <HighlightedText :text="result.contentPreview || '没有正文内容'" :query="query" />
+    </span>
     <span class="search-result-meta">
       <span v-if="result.categoryPath" class="search-result-category">
         <el-icon><Folder /></el-icon>
-        {{ result.categoryPath }}
+        <span class="search-result-category-path">
+          <HighlightedText :text="result.categoryPath" :query="query" />
+        </span>
       </span>
       <el-tag
         v-for="tagName in result.tagNames"
@@ -41,7 +49,7 @@ const updatedLabel = computed(() =>
         size="small"
         :key="tagName"
       >
-        {{ tagName }}
+        <span><HighlightedText :text="tagName" :query="query" /></span>
       </el-tag>
     </span>
   </button>
@@ -81,7 +89,7 @@ const updatedLabel = computed(() =>
 
 .search-result-title,
 .search-result-preview,
-.search-result-category {
+.search-result-category-path {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -123,5 +131,9 @@ const updatedLabel = computed(() =>
 
 .search-result-category .el-icon {
   flex: 0 0 auto;
+}
+
+.search-result-category-path {
+  min-inline-size: 0;
 }
 </style>

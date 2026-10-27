@@ -11,6 +11,7 @@ import {
 } from '@element-plus/icons-vue'
 import { computed, shallowRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import noteXIcon from '@/assets/notex-icon.svg'
 import { UNCATEGORIZED_CATEGORY_ID, type CategoryNode } from '@/types/categories'
 import { NOTE_DRAG_TYPE } from '@/types/notes'
 
@@ -102,9 +103,9 @@ function flattenCategories(categories: CategoryNode[]): CategoryNode[] {
   <div class="app-sidebar">
     <div class="sidebar-brand-group">
       <RouterLink class="sidebar-brand" to="/">
-        <span class="sidebar-brand-mark" aria-hidden="true">M</span>
+        <img class="sidebar-brand-mark" :src="noteXIcon" alt="" />
         <span>
-          <strong class="sidebar-brand-name">MemoBox</strong>
+          <strong class="sidebar-brand-name">NoteX</strong>
         </span>
       </RouterLink>
       <el-button class="sidebar-create-button" :icon="Plus" type="primary" @click="emit('create')">
@@ -249,15 +250,10 @@ function flattenCategories(categories: CategoryNode[]): CategoryNode[] {
 }
 
 .sidebar-brand-mark {
-  display: grid;
+  display: block;
   inline-size: 30px;
   block-size: 30px;
-  place-items: center;
   border-radius: var(--radius-8);
-  background: var(--color-accent);
-  color: #fff;
-  font-size: 0.875rem;
-  font-weight: 750;
 }
 
 .sidebar-brand-name {

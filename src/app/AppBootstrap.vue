@@ -55,25 +55,19 @@ onMounted(() => {
   background: var(--color-canvas);
 }
 
-.diagnostic-panel,
-.loading-panel {
+.diagnostic-panel {
   inline-size: min(100%, 440px);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-10);
   background: var(--color-surface);
   box-shadow: var(--shadow-floating);
-}
-
-.diagnostic-panel {
   padding: var(--space-32);
 }
 
 .loading-panel {
   display: grid;
-  min-block-size: 132px;
   justify-items: center;
   gap: var(--space-12);
-  padding: var(--space-32);
 }
 
 .eyebrow {
@@ -98,6 +92,7 @@ onMounted(() => {
 
 .loading-label {
   margin: 0;
+  font-size: 14px;
 }
 
 .loading-icon {

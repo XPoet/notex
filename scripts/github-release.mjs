@@ -39,17 +39,16 @@ function reservedReleaseVersion(release) {
   const version = tagVersion(release.tag_name)
   if (version) return version
   if (release.draft && /^untagged-[a-f0-9]+$/.test(release.tag_name)) {
-    return tagVersion(release.name?.replace(/^MemoBox /, ''))
+    return tagVersion(release.name?.replace(/^NoteX /, ''))
   }
   return null
 }
 
 export function expectedAssets(version) {
   return [
-    `MemoBox_${version}_windows_x64-setup.exe`,
-    `MemoBox_${version}_windows_x64.msi`,
-    `MemoBox_${version}_macos_aarch64.dmg`,
-    `MemoBox_${version}_macos_x64.dmg`,
+    `NoteX_${version}_windows_x64-setup.exe`,
+    `NoteX_${version}_windows_x64.msi`,
+    `NoteX_${version}_macos_aarch64.dmg`,
   ]
 }
 
@@ -83,7 +82,7 @@ function checkTag(ref, tag, sha) {
 }
 
 function sourceMarker(sha) {
-  return `<!-- memobox-release-source: ${sha} -->`
+  return `<!-- notex-release-source: ${sha} -->`
 }
 
 function checkRelease(release, tag, sourceSha) {
@@ -93,7 +92,7 @@ function checkRelease(release, tag, sourceSha) {
 }
 
 function commitMessage(version, sourceSha) {
-  return `chore(release): v${version}\n\nMemoBox-Release-Source: ${sourceSha}`
+  return `chore(release): v${version}\n\nNoteX-Release-Source: ${sourceSha}`
 }
 
 async function mainState(github, repo, sourceSha, contents) {
@@ -190,12 +189,11 @@ function downloadsTable(version, context) {
     '| --- | --- |',
     `| Windows x64 | [安装程序 EXE](${base}/${assets[0]}) · [MSI](${base}/${assets[1]}) |`,
     `| macOS Apple Silicon（M 系列） | [DMG](${base}/${assets[2]}) |`,
-    `| macOS Intel | [DMG](${base}/${assets[3]}) |`,
   ].join('\n')
 }
 
-const downloadsStart = '<!-- memobox-downloads:start -->'
-const downloadsEnd = '<!-- memobox-downloads:end -->'
+const downloadsStart = '<!-- notex-downloads:start -->'
+const downloadsEnd = '<!-- notex-downloads:end -->'
 
 function releaseBody(sourceSha) {
   return [
@@ -205,7 +203,7 @@ function releaseBody(sourceSha) {
     '安装包正在构建或校验，当前版本尚未公开发布。请等待 Actions 全部成功，Draft 标记消失后再下载。',
     downloadsEnd,
     '',
-    'macOS：打开 DMG，将 MemoBox 拖入“应用程序”。当前采用 ad-hoc 签名，未经 Apple 公证；首次打开被阻止时，可在系统设置 → 隐私与安全性中确认来源后选择“仍要打开”。',
+    'macOS：打开 DMG，将 NoteX 拖入“应用程序”。当前采用 ad-hoc 签名，未经 Apple 公证；首次打开被阻止时，可在系统设置 → 隐私与安全性中确认来源后选择“仍要打开”。',
     'Windows：运行 EXE 或 MSI 安装。当前未配置代码签名证书，系统可能显示未知发布者或 SmartScreen 提示。首次安装可能需要联网安装 WebView2 Runtime。',
     '',
     '`SHA256SUMS.txt` 提供所有安装包的 SHA-256 校验值。GitHub 自动生成的 Source code 文件是源码，不是安装包。',
@@ -255,13 +253,13 @@ export async function prepareRelease({ github, context, core, root }) {
       .filter(
         (item) =>
           reservedReleaseVersion(item) &&
-          /<!-- memobox-release-source: [a-f0-9]{40} -->/.test(item.body ?? ''),
+          /<!-- notex-release-source: [a-f0-9]{40} -->/.test(item.body ?? ''),
       )
       .sort((left, right) =>
         compareVersions(reservedReleaseVersion(right), reservedReleaseVersion(left)),
       )[0]
     if (recorded) {
-      const head = recorded.body.match(/<!-- memobox-release-source: ([a-f0-9]{40}) -->/)[1]
+      const head = recorded.body.match(/<!-- notex-release-source: ([a-f0-9]{40}) -->/)[1]
       const { data: comparison } = await github.rest.repos.compareCommits({
         ...repo,
         base: sourceSha,
@@ -299,7 +297,7 @@ export async function prepareRelease({ github, context, core, root }) {
         ...repo,
         tag_name: `v${version}`,
         target_commitish: sha,
-        name: `MemoBox v${version}`,
+        name: `NoteX v${version}`,
         body: releaseBody(sourceSha),
         draft: true,
         prerelease: false,
@@ -380,7 +378,6 @@ export async function uploadInstallers({
       ['msi', '.msi', names[1]],
     ],
     'aarch64-apple-darwin': [['dmg', '.dmg', names[2]]],
-    'x86_64-apple-darwin': [['dmg', '.dmg', names[3]]],
   }
   const installers = targets[target]
   if (!Object.hasOwn(targets, target)) throw new Error('不支持的安装包构建目标。')

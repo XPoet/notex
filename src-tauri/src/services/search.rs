@@ -17,7 +17,7 @@ pub struct SearchService {
 impl SearchService {
     pub fn new(data_directory: &Path) -> Self {
         Self {
-            database_path: data_directory.join("database").join("memobox.db"),
+            database_path: data_directory.join("database").join("notex.db"),
         }
     }
 
@@ -76,7 +76,7 @@ mod tests {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |value| value.as_nanos());
-        let directory = std::env::temp_dir().join(format!("memo-box-search-{timestamp}"));
+        let directory = std::env::temp_dir().join(format!("notex-search-{timestamp}"));
         let _ = std::fs::create_dir_all(directory.join("database"));
         directory
     }
@@ -85,7 +85,7 @@ mod tests {
     fn searches_title_content_category_and_tags_with_and_excluding_trash()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = data_directory();
-        BootstrapRepository::initialize(&directory.join("database").join("memobox.db"))?;
+        BootstrapRepository::initialize(&directory.join("database").join("notex.db"))?;
         let notes = NotesService::new(&directory);
         let categories = CategoriesService::new(&directory);
         let tags = TagsService::new(&directory);
@@ -112,11 +112,11 @@ mod tests {
     fn rebuilds_a_missing_index_without_changing_original_notes()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = data_directory();
-        BootstrapRepository::initialize(&directory.join("database").join("memobox.db"))?;
+        BootstrapRepository::initialize(&directory.join("database").join("notex.db"))?;
         let notes = NotesService::new(&directory);
         let note = notes.create()?;
         notes.save(&note.id, "索引恢复", "重建后仍可检索。")?;
-        let connection = open_database(&directory.join("database").join("memobox.db"))?;
+        let connection = open_database(&directory.join("database").join("notex.db"))?;
         connection.execute("DELETE FROM notes_fts", [])?;
 
         let search = SearchService::new(&directory);
@@ -130,7 +130,7 @@ mod tests {
     fn performance_searches_and_saves_ten_thousand_notes_within_target_duration()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = data_directory();
-        let database_path = directory.join("database").join("memobox.db");
+        let database_path = directory.join("database").join("notex.db");
         BootstrapRepository::initialize(&database_path)?;
         let mut connection = open_database(&database_path)?;
         let transaction = connection.transaction()?;

@@ -16,7 +16,7 @@ pub struct TagsService {
 impl TagsService {
     pub fn new(data_directory: &Path) -> Self {
         Self {
-            database_path: data_directory.join("database").join("memobox.db"),
+            database_path: data_directory.join("database").join("notex.db"),
         }
     }
     pub fn list(&self) -> Result<Vec<TagSummary>, TagError> {
@@ -102,7 +102,7 @@ mod tests {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |value| value.as_nanos());
-        let directory = std::env::temp_dir().join(format!("memo-box-tags-{timestamp}"));
+        let directory = std::env::temp_dir().join(format!("notex-tags-{timestamp}"));
         let _ = std::fs::create_dir_all(directory.join("database"));
         directory
     }
@@ -111,7 +111,7 @@ mod tests {
     fn trims_deduplicates_and_filters_tags_with_and_logic() -> Result<(), Box<dyn std::error::Error>>
     {
         let directory = data_directory();
-        BootstrapRepository::initialize(&directory.join("database").join("memobox.db"))?;
+        BootstrapRepository::initialize(&directory.join("database").join("notex.db"))?;
         let notes = NotesService::new(&directory);
         let first = notes.create()?;
         let second = notes.create()?;

@@ -3,8 +3,8 @@
 version = 4
 
 [[package]]
-name = "MemoBox"
-version = "0.0.13"
+name = "NoteX"
+version = "0.0.10"
 dependencies = [
  "image",
  "rusqlite",

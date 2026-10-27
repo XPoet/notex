@@ -1,4 +1,4 @@
-# MemoBox 技术设计方案
+# NoteX 技术设计方案
 
 ## 1. 技术栈
 
@@ -230,7 +230,7 @@ Rust 工具职责：
 ## 9. 项目目录
 
 ```text
-memo-box/
+notex/
 ├── README.md
 ├── CLAUDE.md
 ├── AGENTS.md

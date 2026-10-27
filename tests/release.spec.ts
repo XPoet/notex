@@ -15,7 +15,7 @@ const versionFiles = [
 ]
 
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), 'memo-box-release-'))
+  const root = mkdtempSync(join(tmpdir(), 'notex-release-'))
   mkdirSync(join(root, 'scripts'))
   mkdirSync(join(root, 'src-tauri'))
   mkdirSync(join(root, 'bin'))
@@ -24,11 +24,11 @@ function fixture() {
   writeFileSync(join(root, 'src-tauri/tauri.conf.json'), '{\n  "version": "0.0.7"\n}\n')
   writeFileSync(
     join(root, 'src-tauri/Cargo.toml'),
-    '[package]\nname = "MemoBox"\nversion = "0.0.7"\n\n[dependencies]\ntauri = "2"\n',
+    '[package]\nname = "NoteX"\nversion = "0.0.7"\n\n[dependencies]\ntauri = "2"\n',
   )
   writeFileSync(
     join(root, 'src-tauri/Cargo.lock'),
-    'version = 4\n\n[[package]]\nname = "MemoBox"\nversion = "0.0.7"\n\n[[package]]\nname = "tauri"\nversion = "2.11.5"\n',
+    'version = 4\n\n[[package]]\nname = "NoteX"\nversion = "0.0.7"\n\n[[package]]\nname = "tauri"\nversion = "2.11.5"\n',
   )
   writeFileSync(join(root, '.gitignore'), 'build-invocation.txt\n')
   writeFileSync(

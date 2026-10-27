@@ -8,7 +8,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use crate::domain::bootstrap::BootstrapCommandError;
 use crate::services::backup::BackupService;
 
-const EXIT_REQUESTED_EVENT: &str = "memo-box-exit-requested";
+const EXIT_REQUESTED_EVENT: &str = "notex-exit-requested";
 
 #[derive(Clone, Default)]
 pub struct ShutdownState(Arc<AtomicU8>);
@@ -52,7 +52,7 @@ impl ShutdownState {
         })
         .await;
         if !matches!(backup_result, Ok(Some(()))) {
-            eprintln!("MemoBox: exit backup failed; previous backup retained.");
+            eprintln!("NoteX: exit backup failed; previous backup retained.");
         }
         self.0.store(2, Ordering::Release);
         app.exit(0);
