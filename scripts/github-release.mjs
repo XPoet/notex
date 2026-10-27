@@ -53,6 +53,12 @@ export function expectedAssets(version) {
 }
 
 function releaseCommit(context) {
+  if (context.eventName === 'push') {
+    if (context.payload.ref !== 'refs/heads/main' || !/^[a-f0-9]{40}$/.test(context.sha ?? '')) {
+      throw new Error('只允许发布推送到 main 的有效提交。')
+    }
+    return context.sha
+  }
   const pr = context.payload.pull_request
   if (
     !pr?.merged ||

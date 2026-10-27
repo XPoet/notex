@@ -127,9 +127,9 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 ### GitHub 自动发布
 
-本仓库的 `develop` 分支通过 Pull Request 合并到 `main` 后，GitHub Actions 自动递增补丁版本，例如 `0.0.10 → 0.0.11`，同步四处 NoteX 自身版本，生成版本提交与标签并将版本提交回 `main`，随后构建 Windows x64（EXE、MSI）及 macOS Apple Silicon 安装包。质量检查与全部构建成功、安装包完整性检查通过后，才公开 GitHub Release，并附上下载链接、自动生成的变更说明和 `SHA256SUMS.txt`。
+`main` 收到推送时（包括通过 Pull Request 合并 `develop`），GitHub Actions 自动递增补丁版本，例如 `0.0.10 → 0.0.11`，同步四处 NoteX 自身版本，生成版本提交与标签并将版本提交回 `main`，随后构建 Windows x64（EXE、MSI）及 macOS Apple Silicon 安装包。质量检查与全部构建成功、安装包完整性检查通过后，才公开 GitHub Release，并附上下载链接、自动生成的变更说明和 `SHA256SUMS.txt`。
 
-日常发版只需推送 `develop` 并合并 PR，无需提前执行 `pnpm release` 或修改版本号。同一次合并的失败重跑复用已分配版本，不会重复递增；版本分配参考仓库、`main`、已有标签和草稿中的最高正式版本，避免连续合并时发生版本冲突。版本提交只更新 NoteX 自身版本，不升级依赖；`src-tauri/Cargo.lock` 仅同步 `NoteX` 包版本。
+日常发版可直接推送 `main`，或推送 `develop` 并合并 PR，无需提前执行 `pnpm release` 或修改版本号。同一次推送的失败重跑复用已分配版本，不会重复递增；版本分配参考仓库、`main`、已有标签和草稿中的最高正式版本，避免连续合并时发生版本冲突。版本提交只更新 NoteX 自身版本，不升级依赖；`src-tauri/Cargo.lock` 仅同步 `NoteX` 包版本。
 
 ### 本地准备新版本
 

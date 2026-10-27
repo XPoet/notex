@@ -14,6 +14,15 @@ const scripts = [...workflow.matchAll(/^ {10}script: \|\n((?: {12}.*\n)+)/gm)].m
 )
 
 describe('发布工作流的原生脚本入口', () => {
+  it('main 推送使用同一发布流程，并跳过自动版本提交', () => {
+    expect(workflow).toMatch(/on:\n  push:\n    branches: \[main\]/)
+    expect(workflow).not.toMatch(/^  pull_request:/m)
+    expect(workflow).toContain("github.event.head_commit.author.name == 'github-actions[bot]'")
+    expect(workflow).toContain("startsWith(github.event.head_commit.message, 'chore(release): v')")
+    expect(workflow).toContain('ref: ${{ github.sha }}')
+    expect(workflow).toContain('run: pnpm check:frontend')
+  })
+
   it('仅构建 Windows x64 和 macOS Apple Silicon 安装包', () => {
     const targets = [...workflow.matchAll(/^ {12}target: (.+)$/gm)].map((match) => match[1])
     expect(targets).toEqual(['x86_64-pc-windows-msvc', 'aarch64-apple-darwin'])
