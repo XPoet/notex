@@ -290,6 +290,26 @@ describe('GitHub 自动发布', () => {
     },
   )
 
+  it('main 推送使用推送提交作为发布来源', async () => {
+    const args = fixture()
+    args.context.eventName = 'push'
+    args.context.sha = args.context.payload.pull_request.merge_commit_sha
+    args.context.payload = { ref: 'refs/heads/main' }
+    await prepareRelease(args)
+    expect(args.github.rest.repos.createRelease).toHaveBeenCalledWith(
+      expect.objectContaining({ body: expect.stringContaining(args.context.sha) }),
+    )
+  })
+
+  it.each(['refs/heads/develop', 'refs/tags/v1.0.0'])('拒绝非 main 推送：%s', async (ref) => {
+    const args = fixture()
+    args.context.eventName = 'push'
+    args.context.sha = args.context.payload.pull_request.merge_commit_sha
+    args.context.payload = { ref }
+    await expect(prepareRelease(args)).rejects.toThrow('只允许发布')
+    expect(args.github.rest.repos.createRelease).not.toHaveBeenCalled()
+  })
+
   it('首次合并自动递增 patch，并将四个版本文件提交回 main', async () => {
     const args = fixture()
     await prepareRelease(args)

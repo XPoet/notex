@@ -1,9 +1,8 @@
 name: Release desktop apps
 
 on:
-  pull_request:
+  push:
     branches: [main]
-    types: [closed]
 
 permissions:
   contents: read
@@ -16,9 +15,8 @@ concurrency:
 jobs:
   prepare:
     if: >-
-      github.event.pull_request.merged == true &&
-      github.event.pull_request.head.ref == 'develop' &&
-      github.event.pull_request.head.repo.full_name == github.repository
+      !(github.event.head_commit.author.name == 'github-actions[bot]' &&
+        startsWith(github.event.head_commit.message, 'chore(release): v'))
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -30,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
       - name: Prepare draft release
         id: release
