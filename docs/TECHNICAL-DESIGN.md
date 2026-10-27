@@ -2,26 +2,26 @@
 
 ## 1. 技术栈
 
-| 类型 | 技术 |
-|---|---|
-| 包管理器 | pnpm |
-| 桌面框架 | Tauri 2 |
-| 原生开发 | Rust |
-| 前端语言 | TypeScript |
-| 构建工具 | Vite |
-| 前端框架 | Vue 3 |
-| UI 组件库 | Element Plus |
-| 状态管理 | Pinia |
-| 路由管理 | Vue Router |
-| 样式方案 | SCSS |
-| 本地数据库 | SQLite |
-| SQLite 驱动 | rusqlite |
-| Markdown 编辑器 | CodeMirror 6 |
-| 前端代码检查 | Oxlint |
-| 前端代码格式化 | Oxfmt |
-| Vue 类型检查 | vue-tsc |
-| Rust 格式化与检查 | rustfmt + Clippy |
-| 测试 | Vitest + Vue Test Utils + Cargo Test |
+| 类型              | 技术                                 |
+| ----------------- | ------------------------------------ |
+| 包管理器          | pnpm                                 |
+| 桌面框架          | Tauri 2                              |
+| 原生开发          | Rust                                 |
+| 前端语言          | TypeScript                           |
+| 构建工具          | Vite                                 |
+| 前端框架          | Vue 3                                |
+| UI 组件库         | Element Plus                         |
+| 状态管理          | Pinia                                |
+| 路由管理          | Vue Router                           |
+| 样式方案          | SCSS                                 |
+| 本地数据库        | SQLite                               |
+| SQLite 驱动       | rusqlite                             |
+| Markdown 编辑器   | CodeMirror 6                         |
+| 前端代码检查      | Oxlint                               |
+| 前端代码格式化    | Oxfmt                                |
+| Vue 类型检查      | vue-tsc                              |
+| Rust 格式化与检查 | rustfmt + Clippy                     |
+| 测试              | Vitest + Vue Test Utils + Cargo Test |
 
 项目初始化时使用各技术的最新稳定版本，不使用 Alpha、Beta、RC、Nightly 或 Git 开发版本。
 
@@ -66,14 +66,11 @@ Command → Service → Repository → SQLite / File System
 统一使用 Vue Composition API 和 `<script setup lang="ts">`：
 
 ```vue
-<script setup lang="ts">
-</script>
+<script setup lang="ts"></script>
 
-<template>
-</template>
+<template></template>
 
-<style scoped lang="scss">
-</style>
+<style scoped lang="scss"></style>
 ```
 
 目录职责：
@@ -167,14 +164,14 @@ src-tauri/migrations/
 
 建议插件：
 
-| 插件 | 用途 |
-|---|---|
-| dialog | 文件或目录选择 |
-| clipboard-manager | 剪贴板访问 |
-| opener | 打开本地文件或目录 |
-| log | 本地日志 |
-| window-state | 保存窗口大小和位置 |
-| single-instance | 防止多个实例同时运行 |
+| 插件              | 用途                 |
+| ----------------- | -------------------- |
+| dialog            | 文件或目录选择       |
+| clipboard-manager | 剪贴板访问           |
+| opener            | 打开本地文件或目录   |
+| log               | 本地日志             |
+| window-state      | 保存窗口大小和位置   |
+| single-instance   | 防止多个实例同时运行 |
 
 安全原则：
 
@@ -193,22 +190,24 @@ src-tauri/migrations/
 
 前端工具职责：
 
-| 工具 | 职责 |
-|---|---|
-| Oxfmt | 格式化 TypeScript、Vue、SCSS、JSON、Markdown 等前端文件 |
-| Oxlint | 检查 JavaScript、TypeScript 和 Vue `<script>` |
-| vue-tsc | 检查 Vue SFC、Template 和 TypeScript 类型 |
-| Vitest | 前端单元测试 |
+| 工具    | 职责                                                    |
+| ------- | ------------------------------------------------------- |
+| Oxfmt   | 格式化 TypeScript、Vue、SCSS、JSON、Markdown 等前端文件 |
+| Oxlint  | 检查 JavaScript、TypeScript 和 Vue `<script>`           |
+| vue-tsc | 检查 Vue SFC、Template 和 TypeScript 类型               |
+| Vitest  | 前端单元测试                                            |
 
 Rust 工具职责：
 
-| 工具 | 职责 |
-|---|---|
-| rustfmt | Rust 格式化 |
-| Clippy | Rust 静态检查 |
-| Cargo Test | Rust 测试 |
+| 工具       | 职责          |
+| ---------- | ------------- |
+| rustfmt    | Rust 格式化   |
+| Clippy     | Rust 静态检查 |
+| Cargo Test | Rust 测试     |
 
 推荐 Oxfmt 配置文件：`.oxfmtrc.json`。
+
+`components.d.ts` 由组件自动导入插件生成，加入 Oxfmt 忽略列表；该文件仍由 `vue-tsc` 进行类型检查。
 
 ```json
 {
@@ -219,11 +218,7 @@ Rust 工具职责：
   "trailingComma": "all",
   "printWidth": 100,
   "endOfLine": "lf",
-  "ignorePatterns": [
-    "dist/**",
-    "coverage/**",
-    "src-tauri/target/**"
-  ]
+  "ignorePatterns": ["dist/**", "coverage/**", "src-tauri/target/**"]
 }
 ```
 
