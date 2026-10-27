@@ -1,6 +1,6 @@
 [package]
 name = "NoteX"
-version = "0.0.14"
+version = "0.0.15"
 description = "纯本地笔记桌面应用"
 authors = ["NoteX"]
 edition = "2024"
