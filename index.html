@@ -29,6 +29,7 @@
 
       .startup-splash {
         display: grid;
+        box-sizing: border-box;
         min-block-size: 100%;
         place-items: center;
         padding: 24px;
@@ -37,18 +38,12 @@
 
       .startup-splash__panel {
         display: grid;
-        min-inline-size: min(100%, 376px);
-        min-block-size: 132px;
         justify-items: center;
         gap: 12px;
-        padding: 32px;
-        border: 1px solid #ded8cc;
-        border-radius: 10px;
-        background: #fbfaf6;
-        box-shadow: 0 16px 40px rgb(52 40 30 / 10%);
       }
 
       .startup-splash__spinner {
+        box-sizing: border-box;
         inline-size: 28px;
         block-size: 28px;
         border: 3px solid rgb(217 119 87 / 18%);
