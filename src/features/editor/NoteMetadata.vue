@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { computed, shallowRef } from 'vue'
 import type { CategoryNode } from '@/types/categories'
 import type { TagSummary } from '@/types/tags'
@@ -36,22 +37,17 @@ function flattenCategories(categories: CategoryNode[]): CategoryNode[] {
     <el-select
       clearable
       :model-value="categoryId"
-      placeholder="未分类"
+      :placeholder="t('未分类')"
       @update:model-value="emit('updateCategory', $event || undefined)"
     >
-      <el-option
-        v-for="category in categoryOptions"
-        :key="category.id"
-        :label="category.path"
-        :value="category.id"
-      />
+      <el-option v-for="category in categoryOptions" :key="category.id" :label="category.path" :value="category.id" />
     </el-select>
     <el-select
       class="metadata-select"
       multiple
       collapse-tags
       :model-value="selectedTagIds"
-      placeholder="添加标签"
+      :placeholder="t('添加标签')"
       @update:model-value="emit('updateTags', $event)"
     >
       <el-option v-for="tag in tags" :key="tag.id" :label="tag.name" :value="tag.id" />

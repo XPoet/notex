@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
 import type { Ref } from 'vue'
 import { loadNoteImage } from '@/services/assets'
@@ -19,14 +20,12 @@ export function getNoteImageReferences(content: string): NoteImageReference[] {
     code.replace(/[^\n]/g, ' '),
   )
   const references: NoteImageReference[] = []
-  for (const match of text.matchAll(
-    /!\[([^\]\n]*)\]\(\.\/(assets\/[\w-]+\.(?:png|jpe?g|webp|gif))\)/gi,
-  )) {
+  for (const match of text.matchAll(/!\[([^\]\n]*)\]\(\.\/(assets\/[\w-]+\.(?:png|jpe?g|webp|gif))\)/gi)) {
     const relativePath = match[2]
     if (relativePath !== undefined) {
       references.push({
         relativePath,
-        label: match[1] || '图片',
+        label: match[1] || t('图片'),
         to: match.index + match[0].length,
       })
     }

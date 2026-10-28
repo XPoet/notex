@@ -83,14 +83,15 @@
 
 T10 复用既有 `app_settings` 表，不新增结构 Migration。允许的键和值由 Repository 以单事务 UPSERT 保存：
 
-| `key`                      | `value`                                | 默认值与约束                                                 |
-| -------------------------- | -------------------------------------- | ------------------------------------------------------------ |
-| `theme`                    | `light`、`dark` 或 `system`            | 默认 `system`                                                |
-| `note_sort`                | `updatedAt`、`createdAt` 或 `title`    | 默认 `updatedAt`；排序字段只能在 Rust 白名单中映射           |
-| `editor_font_size`         | 14、15、16、17 或 18 的十进制字符串    | 默认 `15`，单位由前端固定为 px                               |
-| `show_category_counts`     | `true` 或 `false`                      | 默认 `true`                                                  |
-| `default_export_directory` | 经 Rust 规范化后的现有可写目录绝对路径 | 默认不存在该行；读取时重新检查，失效或不可写时回退到桌面目录 |
-| `startup_password_hash`    | 带随机盐与参数的 Argon2id PHC 字符串   | 默认不存在该行；存在即启用开启密码，关闭时在事务中移除此键   |
+| `key`                      | `value`                                | 默认值与约束                                                                             |
+| -------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `language`                 | `zh-CN`、`zh-TW` 或 `en`               | 默认不存在该行；缺失或无效时由前端匹配系统语种，不匹配则使用英语；保存时由 Rust 枚举校验 |
+| `theme`                    | `light`、`dark` 或 `system`            | 默认 `system`                                                                            |
+| `note_sort`                | `updatedAt`、`createdAt` 或 `title`    | 默认 `updatedAt`；排序字段只能在 Rust 白名单中映射                                       |
+| `editor_font_size`         | 14、15、16、17 或 18 的十进制字符串    | 默认 `15`，单位由前端固定为 px                                                           |
+| `show_category_counts`     | `true` 或 `false`                      | 默认 `true`                                                                              |
+| `default_export_directory` | 经 Rust 规范化后的现有可写目录绝对路径 | 默认不存在该行；读取时重新检查，失效或不可写时回退到桌面目录                             |
+| `startup_password_hash`    | 带随机盐与参数的 Argon2id PHC 字符串   | 默认不存在该行；存在即启用开启密码，关闭时在事务中移除此键                               |
 
 设置读取会补齐缺失默认值，但不会把用户提供的键、未知 JSON 或任意路径写入数据库。默认导出目录失效后保留数据库原值用于未来恢复，当前快照回退为桌面目录；前端只会收到经过校验的当前有效路径。
 

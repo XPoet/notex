@@ -1,14 +1,6 @@
 <script setup lang="ts">
-import {
-  CircleCheck,
-  Close,
-  Document,
-  Folder,
-  Upload,
-  UploadFilled,
-  View,
-  Warning,
-} from '@element-plus/icons-vue'
+import { t, localizeMessage } from '@/i18n'
+import { CircleCheck, Close, Document, Folder, Upload, UploadFilled, View, Warning } from '@element-plus/icons-vue'
 import { computed, onMounted, shallowRef, useTemplateRef } from 'vue'
 import { useRouter } from 'vue-router'
 import ManagementLayout from '@/layouts/ManagementLayout.vue'
@@ -22,16 +14,22 @@ const categoriesStore = useCategoriesStore()
 const importsStore = useImportsStore()
 const fileInput = useTemplateRef<HTMLInputElement>('fileInput')
 const isDragging = shallowRef(false)
-const statusText: Record<ImportItem['status'], string> = {
-  pending: '待导入',
-  importing: '正在导入',
-  succeeded: '导入成功',
-  failed: '导入失败',
-}
+const statusText = computed<Record<ImportItem['status'], string>>(() => ({
+  pending: t('待导入'),
+  importing: t('正在导入'),
+  succeeded: t('导入成功'),
+  failed: t('导入失败'),
+}))
 const progressText = computed(() => {
   if (importsStore.isImporting)
-    return `已处理 ${importsStore.processedCount} / ${importsStore.items.length} 个文件`
-  return `成功 ${importsStore.succeededCount} 篇，失败 ${importsStore.failedCount} 篇`
+    return t('已处理 {value1} / {value2} 个文件', {
+      value1: importsStore.processedCount,
+      value2: importsStore.items.length,
+    })
+  return t('成功 {value1} 篇，失败 {value2} 篇', {
+    value1: importsStore.succeededCount,
+    value2: importsStore.failedCount,
+  })
 })
 
 function chooseFiles(): void {
@@ -80,8 +78,8 @@ onMounted(() => {
 
 <template>
   <ManagementLayout
-    title="导入笔记"
-    description="将 Markdown 和纯文本文件导入本地笔记。"
+    :title="t('导入笔记')"
+    :description="t('将 Markdown 和纯文本文件导入本地笔记。')"
     :categories="categoriesStore.categories"
     @create="createNote"
   >
@@ -89,9 +87,8 @@ onMounted(() => {
       <el-button
         :icon="Folder"
         @click="router.push({ name: 'workbench', query: { category: UNCATEGORIZED_CATEGORY_ID } })"
+        >{{ t('查看未分类') }}</el-button
       >
-        查看未分类
-      </el-button>
     </template>
 
     <section class="import-view" :aria-busy="importsStore.isImporting">
@@ -101,14 +98,14 @@ onMounted(() => {
         type="file"
         accept=".md,.txt"
         multiple
-        aria-label="选择要导入的 MD 或 TXT 文件"
+        :aria-label="t('选择要导入的 MD 或 TXT 文件')"
         :disabled="importsStore.isImporting"
         @change="selectFiles"
       />
       <section
         class="import-picker"
         :class="{ 'import-picker--dragging': isDragging && !importsStore.isImporting }"
-        aria-label="笔记文件选择区"
+        :aria-label="t('笔记文件选择区')"
         @dragover.prevent="isDragging = true"
         @dragleave="leaveDropZone"
         @drop.prevent="dropFiles"
@@ -116,48 +113,39 @@ onMounted(() => {
         <div class="import-picker-icon" aria-hidden="true">
           <el-icon><UploadFilled /></el-icon>
         </div>
-        <h2>把文件变成笔记</h2>
-        <p>拖入或选择本地文件，可一次导入多篇笔记。</p>
-        <el-button
-          type="primary"
-          :icon="Upload"
-          :disabled="importsStore.isImporting"
-          @click="chooseFiles"
-        >
-          {{ importsStore.items.length > 0 ? '继续选择文件' : '选择文件' }}
+        <h2>{{ t('把文件变成笔记') }}</h2>
+        <p>{{ t('拖入或选择本地文件，可一次导入多篇笔记。') }}</p>
+        <el-button type="primary" :icon="Upload" :disabled="importsStore.isImporting" @click="chooseFiles">
+          {{ importsStore.items.length > 0 ? t('继续选择文件') : t('选择文件') }}
         </el-button>
-        <span class="import-picker-limit">
-          仅支持 Markdown 和 TXT 文件，单个文件不超过 10 MB，每批最多 100 个文件
-        </span>
+        <span class="import-picker-limit">{{
+          t('仅支持 Markdown 和 TXT 文件，单个文件不超过 10 MB，每批最多 100 个文件')
+        }}</span>
       </section>
       <p v-if="importsStore.selectionError" class="import-error" role="alert">
         {{ importsStore.selectionError }}
       </p>
 
-      <section v-if="importsStore.items.length > 0" class="import-list" aria-label="导入文件列表">
+      <section v-if="importsStore.items.length > 0" class="import-list" :aria-label="t('导入文件列表')">
         <header class="import-list-toolbar">
           <div>
             <h2>
-              导入列表 <span>{{ importsStore.items.length }} 个文件</span>
+              {{ t('导入列表') }}<span>{{ t('{value1} 个文件', { value1: importsStore.items.length }) }}</span>
             </h2>
-            <p
-              v-if="importsStore.processedCount > 0 || importsStore.isImporting"
-              role="status"
-              aria-live="polite"
-            >
+            <p v-if="importsStore.processedCount > 0 || importsStore.isImporting" role="status" aria-live="polite">
               {{ progressText }}
             </p>
-            <p v-else>确认文件后开始导入，同名笔记会分别保留。</p>
+            <p v-else>{{ t('确认文件后开始导入，同名笔记会分别保留。') }}</p>
           </div>
           <div class="import-list-actions">
-            <el-button text :disabled="importsStore.isImporting" @click="importsStore.clear"
-              >清空列表</el-button
-            >
+            <el-button text :disabled="importsStore.isImporting" @click="importsStore.clear">{{
+              t('清空列表')
+            }}</el-button>
             <el-button
               v-if="importsStore.failedCount > 0"
               :disabled="importsStore.isImporting"
               @click="importsStore.start(true)"
-              >重试失败项</el-button
+              >{{ t('重试失败项') }}</el-button
             >
             <el-button
               v-if="importsStore.pendingCount > 0 || importsStore.isImporting"
@@ -166,7 +154,9 @@ onMounted(() => {
               @click="importsStore.start()"
             >
               {{
-                importsStore.isImporting ? '正在导入' : `开始导入（${importsStore.pendingCount}）`
+                importsStore.isImporting
+                  ? t('正在导入')
+                  : t('开始导入（{value1}）', { value1: importsStore.pendingCount })
               }}
             </el-button>
           </div>
@@ -176,16 +166,16 @@ onMounted(() => {
           class="import-progress"
           :value="importsStore.processedCount"
           :max="importsStore.items.length"
-          aria-label="导入进度"
+          :aria-label="t('导入进度')"
         />
         <div class="import-table-scroll">
           <table class="import-table">
             <thead>
               <tr>
-                <th scope="col">文件 / 笔记名</th>
-                <th scope="col">大小</th>
-                <th scope="col">状态</th>
-                <th scope="col">操作</th>
+                <th scope="col">{{ t('文件 / 笔记名') }}</th>
+                <th scope="col">{{ t('大小') }}</th>
+                <th scope="col">{{ t('状态') }}</th>
+                <th scope="col">{{ t('操作') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -203,10 +193,9 @@ onMounted(() => {
                 <td>
                   <div class="import-status" :class="`import-status--${item.status}`">
                     <el-icon v-if="item.status === 'succeeded'"><CircleCheck /></el-icon
-                    ><el-icon v-else-if="item.status === 'failed'"><Warning /></el-icon
-                    >{{ statusText[item.status] }}
+                    ><el-icon v-else-if="item.status === 'failed'"><Warning /></el-icon>{{ statusText[item.status] }}
                   </div>
-                  <p v-if="item.error" class="import-item-error">{{ item.error.message }}</p>
+                  <p v-if="item.error" class="import-item-error">{{ localizeMessage(item.error.message) }}</p>
                 </td>
                 <td>
                   <el-button
@@ -214,18 +203,18 @@ onMounted(() => {
                     text
                     :icon="View"
                     :disabled="importsStore.isImporting"
-                    :aria-label="`查看笔记 ${item.title}`"
+                    :aria-label="t('查看笔记 {value1}', { value1: item.title })"
                     @click="openNote(item.noteId)"
-                    >查看</el-button
+                    >{{ t('查看') }}</el-button
                   >
                   <el-button
                     v-else
                     text
                     :icon="Close"
                     :disabled="importsStore.isImporting"
-                    :aria-label="`将 ${item.file.name} 移出列表`"
+                    :aria-label="t('将 {value1} 移出列表', { value1: item.file.name })"
                     @click="importsStore.removeItem(item.id)"
-                    >移出</el-button
+                    >{{ t('移出') }}</el-button
                   >
                 </td>
               </tr>

@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { defineStore } from 'pinia'
 import { computed, shallowRef } from 'vue'
 import { importNote, toImportError } from '@/services/imports'
@@ -6,21 +7,22 @@ import { MAX_IMPORT_FILES, type ImportItem } from '@/types/imports'
 export const useImportsStore = defineStore('imports', () => {
   const items = shallowRef<ImportItem[]>([])
   const isImporting = shallowRef(false)
-  const selectionError = shallowRef<string>()
-  const pendingCount = computed(
-    () => items.value.filter((item) => item.status === 'pending').length,
+  const selectionLimitExceeded = shallowRef(false)
+  const selectionError = computed(() =>
+    selectionLimitExceeded.value
+      ? t('一次最多选择 {value1} 个文件，请分批导入。', { value1: MAX_IMPORT_FILES })
+      : undefined,
   )
-  const succeededCount = computed(
-    () => items.value.filter((item) => item.status === 'succeeded').length,
-  )
+  const pendingCount = computed(() => items.value.filter((item) => item.status === 'pending').length)
+  const succeededCount = computed(() => items.value.filter((item) => item.status === 'succeeded').length)
   const failedCount = computed(() => items.value.filter((item) => item.status === 'failed').length)
   const processedCount = computed(() => succeededCount.value + failedCount.value)
 
   function addFiles(files: File[]): void {
     if (isImporting.value || files.length === 0) return
-    selectionError.value = undefined
+    selectionLimitExceeded.value = false
     if (items.value.length + files.length > MAX_IMPORT_FILES) {
-      selectionError.value = `一次最多选择 ${MAX_IMPORT_FILES} 个文件，请分批导入。`
+      selectionLimitExceeded.value = true
       return
     }
     items.value = [
@@ -43,13 +45,13 @@ export const useImportsStore = defineStore('imports', () => {
   function removeItem(id: string): void {
     if (isImporting.value) return
     items.value = items.value.filter((item) => item.id !== id)
-    selectionError.value = undefined
+    selectionLimitExceeded.value = false
   }
 
   function clear(): void {
     if (isImporting.value) return
     items.value = []
-    selectionError.value = undefined
+    selectionLimitExceeded.value = false
   }
 
   async function start(retryFailed = false): Promise<void> {

@@ -227,21 +227,24 @@ Rust 必须根据字节文件头识别 PNG、JPEG、WebP 或 GIF，并以受限�
 
 无参数。返回 `SettingsSnapshot`：
 
-| 字段                              | 类型                                    | 说明                                               |
-| --------------------------------- | --------------------------------------- | -------------------------------------------------- |
-| `theme`                           | `'light' ｜ 'dark' ｜ 'system'`         | 默认 `system`；前端在启动前据此设置根元素属性      |
-| `noteSort`                        | `'updatedAt' ｜ 'createdAt' ｜ 'title'` | 默认 `updatedAt`                                   |
-| `editorFontSize`                  | `14 ｜ 15 ｜ 16 ｜ 17 ｜ 18`            | 默认 `15`，单位为 px                               |
-| `showCategoryCounts`              | boolean                                 | 默认 `true`；保留兼容，侧栏不再显示数量            |
-| `dataDirectory`                   | string                                  | 系统应用数据目录的绝对路径，仅供设置页只读展示     |
-| `defaultExportDirectory`          | string                                  | 当前有效的默认导出目录绝对路径；未配置时为桌面目录 |
-| `hasCustomDefaultExportDirectory` | boolean                                 | 是否已保存用户选择的默认导出目录                   |
-| `appVersion`                      | string                                  | 由应用包版本读取                                   |
-| `schemaVersion`                   | number                                  | 最后成功 Migration 版本                            |
+| 字段                              | 类型                                    | 说明                                                                      |
+| --------------------------------- | --------------------------------------- | ------------------------------------------------------------------------- |
+| `language`                        | `'zh-CN' ｜ 'zh-TW' ｜ 'en' ｜ null`    | 未保存或存储值无效时返回 `null`；前端默认匹配系统语种，无法匹配时使用英语 |
+| `theme`                           | `'light' ｜ 'dark' ｜ 'system'`         | 默认 `system`；前端在启动前据此设置根元素属性                             |
+| `noteSort`                        | `'updatedAt' ｜ 'createdAt' ｜ 'title'` | 默认 `updatedAt`                                                          |
+| `editorFontSize`                  | `14 ｜ 15 ｜ 16 ｜ 17 ｜ 18`            | 默认 `15`，单位为 px                                                      |
+| `showCategoryCounts`              | boolean                                 | 默认 `true`；保留兼容，侧栏不再显示数量                                   |
+| `dataDirectory`                   | string                                  | 系统应用数据目录的绝对路径，仅供设置页只读展示                            |
+| `defaultExportDirectory`          | string                                  | 当前有效的默认导出目录绝对路径；未配置时为桌面目录                        |
+| `hasCustomDefaultExportDirectory` | boolean                                 | 是否已保存用户选择的默认导出目录                                          |
+| `appVersion`                      | string                                  | 由应用包版本读取                                                          |
+| `schemaVersion`                   | number                                  | 最后成功 Migration 版本                                                   |
 
 ### `save_settings`
 
-请求：`{ theme, noteSort, editorFontSize, showCategoryCounts, defaultExportDirectory? }`。所有非路径值必须是上述枚举或范围内的值；`defaultExportDirectory` 只能来自系统目录选择器，Rust 规范化、验证存在和可写后保存。省略该字段时保留当前默认导出目录，传入 `null` 时清除并回退到桌面目录。成功返回完整 `SettingsSnapshot`；其中数据目录和当前有效的默认导出目录绝对路径仅用于设置页只读展示及导出默认值，前端不得将它们拼接为任意文件访问请求。
+请求：`{ language, theme, noteSort, editorFontSize, showCategoryCounts, defaultExportDirectory? }`。所有非路径值必须是上述枚举或范围内的值；`defaultExportDirectory` 只能来自系统目录选择器，Rust 规范化、验证存在和可写后保存。省略该字段时保留当前默认导出目录，传入 `null` 时清除并回退到桌面目录。成功返回完整 `SettingsSnapshot`；其中数据目录和当前有效的默认导出目录绝对路径仅用于设置页只读展示及导出默认值，前端不得将它们拼接为任意文件访问请求。
+
+`language` 保存请求只接受三种具体语种，不接受 `null` 或 `system`。保存成功后立即更新界面及日期格式。WebView 仅在 `notex.language` 缓存该语种，供加载和解锁前恢复界面使用，不缓存笔记或其他设置，也不改变启动访问控制；解锁后的设置快照以数据库为准。
 
 ### `open_data_directory`
 

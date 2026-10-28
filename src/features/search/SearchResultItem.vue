@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t, locale } from '@/i18n'
 import { Folder } from '@element-plus/icons-vue'
 import { computed } from 'vue'
 import HighlightedText from '@/components/HighlightedText.vue'
@@ -13,9 +14,9 @@ const emit = defineEmits<{
   open: [id: string]
 }>()
 
-const displayTitle = computed(() => props.result.title.trim() || '无标题笔记')
+const displayTitle = computed(() => props.result.title.trim() || t('无标题笔记'))
 const updatedLabel = computed(() =>
-  new Intl.DateTimeFormat('zh-CN', {
+  new Intl.DateTimeFormat(locale.value, {
     month: 'numeric',
     day: 'numeric',
     hour: '2-digit',
@@ -33,7 +34,7 @@ const updatedLabel = computed(() =>
       <time class="search-result-time" :datetime="result.updatedAt">{{ updatedLabel }}</time>
     </span>
     <span class="search-result-preview">
-      <HighlightedText :text="result.contentPreview || '没有正文内容'" :query="query" />
+      <HighlightedText :text="result.contentPreview || t('没有正文内容')" :query="query" />
     </span>
     <span class="search-result-meta">
       <span v-if="result.categoryPath" class="search-result-category">
@@ -42,13 +43,7 @@ const updatedLabel = computed(() =>
           <HighlightedText :text="result.categoryPath" :query="query" />
         </span>
       </span>
-      <el-tag
-        v-for="tagName in result.tagNames"
-        disable-transitions
-        type="primary"
-        size="small"
-        :key="tagName"
-      >
+      <el-tag v-for="tagName in result.tagNames" disable-transitions type="primary" size="small" :key="tagName">
         <span><HighlightedText :text="tagName" :query="query" /></span>
       </el-tag>
     </span>

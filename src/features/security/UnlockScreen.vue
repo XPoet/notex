@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t, localizeMessage } from '@/i18n'
 import { nextTick, onMounted, ref, watch } from 'vue'
 import type { InputInstance } from 'element-plus'
 import logo from '@/assets/notex-icon.svg'
@@ -39,26 +40,26 @@ watch(
 <template>
   <section class="unlock-screen" aria-labelledby="unlock-title">
     <img :src="logo" alt="" class="unlock-logo" />
-    <h1 id="unlock-title">解锁 NoteX</h1>
-    <p class="unlock-description">输入开启密码，继续使用你的本地笔记。</p>
+    <h1 id="unlock-title">{{ t('解锁 NoteX') }}</h1>
+    <p class="unlock-description">{{ t('输入开启密码，继续使用你的本地笔记。') }}</p>
     <form class="unlock-form" @submit.prevent="submit">
-      <label for="startup-password">开启密码</label>
+      <label for="startup-password">{{ t('开启密码') }}</label>
       <el-input
         id="startup-password"
         ref="input"
         v-model="password"
         type="password"
         autocomplete="current-password"
-        placeholder="请输入开启密码"
+        :placeholder="t('请输入开启密码')"
         show-password
         :disabled="busy"
         :aria-invalid="Boolean(error)"
         :aria-describedby="error ? 'unlock-error' : undefined"
       />
-      <p v-if="error" id="unlock-error" class="unlock-error" role="alert">{{ error }}</p>
-      <el-button type="primary" native-type="submit" :loading="busy" :disabled="!password || busy">
-        解锁
-      </el-button>
+      <p v-if="error" id="unlock-error" class="unlock-error" role="alert">{{ localizeMessage(error) }}</p>
+      <el-button type="primary" native-type="submit" :loading="busy" :disabled="!password || busy">{{
+        t('解锁')
+      }}</el-button>
     </form>
   </section>
 </template>

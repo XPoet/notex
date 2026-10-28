@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { computed } from 'vue'
 import SaveStatus from './SaveStatus.vue'
 import type { SaveStatus as SaveStatusType } from '@/stores/notes'
@@ -15,14 +16,11 @@ const emit = defineEmits<{
 
 const wordCount = computed(() => countWords(props.content))
 const characterCount = computed(() => Array.from(props.content.replace(/\s/g, '')).length)
-const lineCount = computed(() =>
-  props.content === '' ? 1 : props.content.split(/\r\n|\r|\n/).length,
-)
+const lineCount = computed(() => (props.content === '' ? 1 : props.content.split(/\r\n|\r|\n/).length))
 
 function countWords(content: string): number {
   const cjkCharacterCount = (content.match(/[\u3400-\u9fff]/g) ?? []).length
-  const latinWordCount =
-    content.replace(/[\u3400-\u9fff]/g, ' ').match(/[A-Za-z0-9_]+/g)?.length ?? 0
+  const latinWordCount = content.replace(/[\u3400-\u9fff]/g, ' ').match(/[A-Za-z0-9_]+/g)?.length ?? 0
 
   return cjkCharacterCount + latinWordCount
 }
@@ -31,15 +29,13 @@ function countWords(content: string): number {
 <template>
   <footer class="editor-status-bar">
     <div class="editor-status-bar__statistics">
-      <span>字数 {{ wordCount }}</span>
-      <span>字符 {{ characterCount }}</span>
-      <span>行 {{ lineCount }}</span>
+      <span>{{ t('字数 {value1}', { value1: wordCount }) }}</span>
+      <span>{{ t('字符 {value1}', { value1: characterCount }) }}</span>
+      <span>{{ t('行 {value1}', { value1: lineCount }) }}</span>
     </div>
     <div class="editor-status-bar__save-state">
       <SaveStatus :status="saveStatus" :message="saveError" />
-      <el-button v-if="saveStatus === 'failed'" text type="primary" @click="emit('retry')">
-        重试
-      </el-button>
+      <el-button v-if="saveStatus === 'failed'" text type="primary" @click="emit('retry')">{{ t('重试') }}</el-button>
     </div>
   </footer>
 </template>

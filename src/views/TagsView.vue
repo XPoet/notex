@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t, localizeMessage } from '@/i18n'
 import { Delete, Download, EditPen, Plus, Search, View } from '@element-plus/icons-vue'
 import { computed, onMounted, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
@@ -26,8 +27,8 @@ const exportScopeOptions = computed<ExportScopeOption[]>(() => {
   return [
     {
       scope: { kind: 'tag', id: tag.id },
-      title: `标签「${tag.name}」`,
-      description: '每条笔记单独导出，不按原分类重复创建文件。',
+      title: t('标签「{value1}」', { value1: tag.name }),
+      description: t('每条笔记单独导出，不按原分类重复创建文件。'),
     },
   ]
 })
@@ -39,17 +40,17 @@ const visibleTags = computed(() => {
   return tagsStore.tags.filter((tag) => tag.name.toLocaleLowerCase().includes(keyword))
 })
 const tagStats = computed(() => [
-  { label: '标签总数', value: tagsStore.tags.length },
-  { label: '已关联标签', value: tagsStore.tags.filter((tag) => tag.noteCount > 0).length },
-  { label: '未关联标签', value: tagsStore.tags.filter((tag) => tag.noteCount === 0).length },
+  { label: t('标签总数'), value: tagsStore.tags.length },
+  { label: t('已关联标签'), value: tagsStore.tags.filter((tag) => tag.noteCount > 0).length },
+  { label: t('未关联标签'), value: tagsStore.tags.filter((tag) => tag.noteCount === 0).length },
 ])
 
 async function promptAddTag(): Promise<void> {
   let value: string
   try {
-    ;({ value } = await ElMessageBox.prompt('输入标签名称。', '新建标签', {
-      confirmButtonText: '创建',
-      cancelButtonText: '取消',
+    ;({ value } = await ElMessageBox.prompt(t('输入标签名称。'), t('新建标签'), {
+      confirmButtonText: t('创建'),
+      cancelButtonText: t('取消'),
     }))
   } catch {
     return
@@ -66,10 +67,10 @@ async function promptAddTag(): Promise<void> {
 async function rename(tag: TagSummary): Promise<void> {
   let value: string
   try {
-    ;({ value } = await ElMessageBox.prompt('输入新的标签名称。', `重命名「${tag.name}」`, {
+    ;({ value } = await ElMessageBox.prompt(t('输入新的标签名称。'), t('重命名「{value1}」', { value1: tag.name }), {
       inputValue: tag.name,
-      confirmButtonText: '保存',
-      cancelButtonText: '取消',
+      confirmButtonText: t('保存'),
+      cancelButtonText: t('取消'),
     }))
   } catch {
     return
@@ -79,9 +80,11 @@ async function rename(tag: TagSummary): Promise<void> {
     const result = await renameTag(tag.id, value)
     if (result.mergePreview) {
       const shouldMerge = await ElMessageBox.confirm(
-        `目标标签已存在，将合并 ${result.mergePreview.affectedNoteCount} 条笔记的关联。是否继续？`,
-        '确认合并标签',
-        { confirmButtonText: '合并', cancelButtonText: '取消', type: 'warning' },
+        t('目标标签已存在，将合并 {value1} 条笔记的关联。是否继续？', {
+          value1: result.mergePreview.affectedNoteCount,
+        }),
+        t('确认合并标签'),
+        { confirmButtonText: t('合并'), cancelButtonText: t('取消'), type: 'warning' },
       )
         .then(() => true)
         .catch(() => false)
@@ -98,9 +101,9 @@ async function rename(tag: TagSummary): Promise<void> {
 
 async function remove(tag: TagSummary): Promise<void> {
   const shouldRemove = await ElMessageBox.confirm(
-    `删除标签「${tag.name}」只会解除关联，不会删除笔记。是否继续？`,
-    '确认删除标签',
-    { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' },
+    t('删除标签「{value1}」只会解除关联，不会删除笔记。是否继续？', { value1: tag.name }),
+    t('确认删除标签'),
+    { confirmButtonText: t('删除'), cancelButtonText: t('取消'), type: 'warning' },
   )
     .then(() => true)
     .catch(() => false)
@@ -110,7 +113,7 @@ async function remove(tag: TagSummary): Promise<void> {
   isSubmitting.value = true
   try {
     await deleteTag(tag.id)
-    ElMessage.success('标签已删除。')
+    ElMessage.success(t('标签已删除。'))
     await tagsStore.load()
   } finally {
     isSubmitting.value = false
@@ -137,20 +140,20 @@ onMounted(() => {
 
 <template>
   <ManagementLayout
-    title="标签管理"
-    description="标签可重复用于多条笔记；多标签筛选默认同时满足全部标签。"
+    :title="t('标签管理')"
+    :description="t('标签可重复用于多条笔记；多标签筛选默认同时满足全部标签。')"
     :categories="categoriesStore.categories"
     :tag-count="tagsStore.tags.length"
     @create="createNoteFromSidebar"
   >
     <template #action>
-      <el-button type="primary" :icon="Plus" :loading="isSubmitting" @click="promptAddTag">
-        新建标签
-      </el-button>
+      <el-button type="primary" :icon="Plus" :loading="isSubmitting" @click="promptAddTag">{{
+        t('新建标签')
+      }}</el-button>
     </template>
 
     <p v-if="tagsStore.error" class="management-error" role="alert">
-      {{ tagsStore.error.message }}
+      {{ localizeMessage(tagsStore.error.message) }}
     </p>
     <section v-else class="tag-content">
       <section class="tag-stats">
@@ -161,7 +164,7 @@ onMounted(() => {
       </section>
 
       <section class="tag-toolbar">
-        <el-input v-model="query" class="tag-search" placeholder="搜索标签">
+        <el-input v-model="query" class="tag-search" :placeholder="t('搜索标签')">
           <template #prefix>
             <el-icon><Search /></el-icon>
           </template>
@@ -171,36 +174,28 @@ onMounted(() => {
       <el-empty
         v-if="!tagsStore.isLoading && visibleTags.length === 0"
         class="tag-empty"
-        :description="query.trim() === '' ? '还没有标签' : '暂无匹配标签'"
+        :description="query.trim() === '' ? t('还没有标签') : t('暂无匹配标签')"
       />
       <section v-else class="tag-table-wrap">
         <el-table :data="visibleTags" class="tag-table" height="100%" :native-scrollbar="false">
-          <el-table-column label="标签" min-width="220">
+          <el-table-column :label="t('标签')" min-width="220">
             <template #default="{ row }">
               <el-tag disable-transitions>{{ row.name }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="关联笔记" min-width="150">
+          <el-table-column :label="t('关联笔记')" min-width="150">
             <template #default="{ row }">
-              <span class="tag-note-count">{{ row.noteCount }} 篇笔记</span>
+              <span class="tag-note-count">{{ t('{value1} 篇笔记', { value1: row.noteCount }) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" min-width="260" align="right">
+          <el-table-column :label="t('操作')" min-width="260" align="right">
             <template #default="{ row }">
               <div class="tag-row-actions">
-                <el-button text size="small" :icon="View" @click="viewNotes(row)"> 查看 </el-button>
-                <el-button text size="small" :icon="Download" @click="openExport(row)">
-                  导出
-                </el-button>
-                <el-button
-                  text
-                  size="small"
-                  :disabled="isSubmitting"
-                  :icon="EditPen"
-                  @click="rename(row)"
-                >
-                  重命名
-                </el-button>
+                <el-button text size="small" :icon="View" @click="viewNotes(row)">{{ t('查看') }}</el-button>
+                <el-button text size="small" :icon="Download" @click="openExport(row)">{{ t('导出') }}</el-button>
+                <el-button text size="small" :disabled="isSubmitting" :icon="EditPen" @click="rename(row)">{{
+                  t('重命名')
+                }}</el-button>
                 <el-button
                   text
                   type="danger"
@@ -208,9 +203,8 @@ onMounted(() => {
                   :disabled="isSubmitting"
                   :icon="Delete"
                   @click="remove(row)"
+                  >{{ t('删除') }}</el-button
                 >
-                  删除
-                </el-button>
               </div>
             </template>
           </el-table-column>

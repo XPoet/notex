@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t, localizeMessage, locale } from '@/i18n'
 import { onMounted, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -17,12 +18,11 @@ const settingsStore = useSettingsStore()
 const router = useRouter()
 const isOpeningDirectory = shallowRef(false)
 
-function requestFromCurrent(
-  changes: Partial<SaveSettingsRequest>,
-): SaveSettingsRequest | undefined {
+function requestFromCurrent(changes: Partial<SaveSettingsRequest>): SaveSettingsRequest | undefined {
   const settings = settingsStore.snapshot
   if (settings === undefined) return undefined
   const request: SaveSettingsRequest = {
+    language: changes.language ?? settings.language ?? locale.value,
     theme: changes.theme ?? settings.theme,
     noteSort: changes.noteSort ?? settings.noteSort,
     editorFontSize: changes.editorFontSize ?? settings.editorFontSize,
@@ -40,7 +40,7 @@ async function updateSettings(changes: Partial<SaveSettingsRequest>): Promise<vo
   try {
     await settingsStore.save(request)
   } catch {
-    ElMessage.error(settingsStore.error?.message ?? '保存设置失败。')
+    ElMessage.error(localizeMessage(settingsStore.error?.message) ?? t('保存设置失败。'))
   }
 }
 
@@ -49,7 +49,7 @@ async function chooseDirectory(): Promise<void> {
     const directory = await chooseDefaultExportDirectory()
     if (directory !== undefined) await updateSettings({ defaultExportDirectory: directory })
   } catch {
-    ElMessage.error('无法选择默认导出目录。')
+    ElMessage.error(t('无法选择默认导出目录。'))
   }
 }
 
@@ -58,7 +58,7 @@ async function openDirectory(): Promise<void> {
   try {
     await openDataDirectory()
   } catch {
-    ElMessage.error('无法打开数据目录。')
+    ElMessage.error(t('无法打开数据目录。'))
   } finally {
     isOpeningDirectory.value = false
   }
@@ -75,14 +75,14 @@ onMounted(() => {
 
 <template>
   <ManagementLayout
-    title="设置"
-    description="管理保存在此设备上的偏好与目录。"
+    :title="t('设置')"
+    :description="t('管理保存在此设备上的偏好与目录。')"
     :categories="categoriesStore.categories"
     :tag-count="tagsStore.tags.length"
     @create="createNote"
   >
     <p v-if="settingsStore.error && !settingsStore.snapshot" class="settings-error" role="alert">
-      {{ settingsStore.error.message }}
+      {{ localizeMessage(settingsStore.error.message) }}
     </p>
     <SettingsPanel
       v-else

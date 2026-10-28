@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t, localizeMessage } from '@/i18n'
 import { Filter, Search, Sort } from '@element-plus/icons-vue'
 import type { ScrollbarInstance } from 'element-plus'
 import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef } from 'vue'
@@ -32,9 +33,7 @@ const visibleNotes = computed(() => {
   if (keyword === '') {
     return props.notes
   }
-  return props.notes.filter((note) =>
-    `${note.title}\n${note.contentPreview}`.toLocaleLowerCase().includes(keyword),
-  )
+  return props.notes.filter((note) => `${note.title}\n${note.contentPreview}`.toLocaleLowerCase().includes(keyword))
 })
 const visibleRange = computed(() => {
   const maximumStart = Math.max(0, visibleNotes.value.length - 1)
@@ -45,11 +44,9 @@ const visibleRange = computed(() => {
     end: Math.min(visibleNotes.value.length, start + visibleCount),
   }
 })
-const renderedNotes = computed(() =>
-  visibleNotes.value.slice(visibleRange.value.start, visibleRange.value.end),
-)
+const renderedNotes = computed(() => visibleNotes.value.slice(visibleRange.value.start, visibleRange.value.end))
 const noteListTitle = computed(() =>
-  props.categoryName === undefined ? '全部笔记' : `${props.categoryName}笔记`,
+  props.categoryName === undefined ? t('全部笔记') : t('{value1}笔记', { value1: props.categoryName }),
 )
 const virtualHeight = computed(() => visibleNotes.value.length * itemHeight)
 const virtualOffset = computed(() => visibleRange.value.start * itemHeight)
@@ -83,7 +80,7 @@ onBeforeUnmount(() => {
       <el-input
         v-model="query"
         class="note-list-search"
-        placeholder="搜索笔记"
+        :placeholder="t('搜索笔记')"
         clearable
         @update:model-value="emit('search', $event)"
       >
@@ -93,27 +90,24 @@ onBeforeUnmount(() => {
       </el-input>
     </header>
 
-    <div v-if="loading" class="note-list-empty">正在加载笔记…</div>
+    <div v-if="loading" class="note-list-empty">{{ t('正在加载笔记…') }}</div>
     <div v-else-if="error" class="note-list-empty" role="alert">
-      <p class="note-list-empty-title">无法读取笔记</p>
-      <p class="note-list-empty-copy">{{ error }}</p>
-      <el-button type="primary" @click="emit('retry')">重试</el-button>
+      <p class="note-list-empty-title">{{ t('无法读取笔记') }}</p>
+      <p class="note-list-empty-copy">{{ localizeMessage(error) }}</p>
+      <el-button type="primary" @click="emit('retry')">{{ t('重试') }}</el-button>
     </div>
     <div v-else-if="notes.length === 0" class="note-list-empty">
-      <p class="note-list-empty-title">从一条笔记开始</p>
-      <p class="note-list-empty-copy">点击“新建笔记”，内容会自动保存在本机。</p>
-      <el-button type="primary" @click="emit('create')">新建第一条笔记</el-button>
+      <p class="note-list-empty-title">{{ t('从一条笔记开始') }}</p>
+      <p class="note-list-empty-copy">{{ t('点击“新建笔记”，内容会自动保存在本机。') }}</p>
+      <el-button type="primary" @click="emit('create')">{{ t('新建第一条笔记') }}</el-button>
     </div>
     <div v-else-if="visibleNotes.length === 0" class="note-list-empty">
-      <p class="note-list-empty-title">没有匹配的笔记</p>
-      <p class="note-list-empty-copy">换一个关键词，或清空当前搜索。</p>
+      <p class="note-list-empty-title">{{ t('没有匹配的笔记') }}</p>
+      <p class="note-list-empty-copy">{{ t('换一个关键词，或清空当前搜索。') }}</p>
     </div>
     <el-scrollbar v-else ref="listItems" class="note-list-items" @scroll="updateVisibleRange">
       <div class="note-list-virtual-spacer" :style="{ height: `${virtualHeight}px` }">
-        <div
-          class="note-list-virtual-window"
-          :style="{ transform: `translateY(${virtualOffset}px)` }"
-        >
+        <div class="note-list-virtual-window" :style="{ transform: `translateY(${virtualOffset}px)` }">
           <NoteListItem
             v-for="note in renderedNotes"
             :key="note.id"

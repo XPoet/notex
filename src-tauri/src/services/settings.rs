@@ -81,6 +81,7 @@ fn snapshot(
         ),
     };
     Ok(SettingsSnapshot {
+        language: SettingsRepository::language(&values),
         theme: SettingsRepository::theme(&values),
         note_sort: SettingsRepository::note_sort(connection)?,
         editor_font_size: SettingsRepository::editor_font_size(&values),
@@ -133,7 +134,7 @@ mod tests {
 
     use crate::repositories::bootstrap::BootstrapRepository;
     use crate::{
-        domain::settings::{NoteSort, ThemePreference},
+        domain::settings::{AppLanguage, NoteSort, ThemePreference},
         services::settings::SettingsService,
     };
 
@@ -155,6 +156,7 @@ mod tests {
         let service = SettingsService::new(&directory, &directory);
         let snapshot = service.save(
             &SaveSettingsRequest {
+                language: AppLanguage::English,
                 theme: ThemePreference::Dark,
                 note_sort: NoteSort::Title,
                 editor_font_size: 17,
@@ -164,6 +166,7 @@ mod tests {
             "0.1.0",
         )?;
         assert_eq!(snapshot.theme, ThemePreference::Dark);
+        assert_eq!(snapshot.language, Some(AppLanguage::English));
         assert_eq!(snapshot.note_sort, NoteSort::Title);
         assert_eq!(snapshot.editor_font_size, 17);
         assert!(!snapshot.show_category_counts);
@@ -191,6 +194,36 @@ mod tests {
             desktop_directory.canonicalize()?.to_string_lossy()
         );
         assert!(!snapshot.has_custom_default_export_directory);
+        assert_eq!(snapshot.language, None);
+        Ok(())
+    }
+
+    #[test]
+    fn persists_each_language_without_changing_the_schema() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let directory = data_directory();
+        BootstrapRepository::initialize(&directory.join("database").join("notex.db"))?;
+        let service = SettingsService::new(&directory, &directory);
+        for language in [
+            AppLanguage::SimplifiedChinese,
+            AppLanguage::TraditionalChinese,
+            AppLanguage::English,
+        ] {
+            service.save(
+                &SaveSettingsRequest {
+                    language,
+                    theme: ThemePreference::System,
+                    note_sort: NoteSort::UpdatedAt,
+                    editor_font_size: 15,
+                    show_category_counts: true,
+                    default_export_directory: None,
+                },
+                "0.1.0",
+            )?;
+            let restored = SettingsService::new(&directory, &directory).get("0.1.0")?;
+            assert_eq!(restored.language, Some(language));
+            assert_eq!(restored.schema_version, 3);
+        }
         Ok(())
     }
 }

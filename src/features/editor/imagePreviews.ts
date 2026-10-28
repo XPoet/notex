@@ -1,3 +1,4 @@
+import { t, locale } from '@/i18n'
 import { StateEffect, StateField } from '@codemirror/state'
 import type { EditorState } from '@codemirror/state'
 import { Decoration, EditorView, WidgetType } from '@codemirror/view'
@@ -8,6 +9,8 @@ import type { NoteImage } from '@/composables/useNoteImages'
 export const refreshImagePreviews = StateEffect.define<null>()
 
 class ImagePreviewWidget extends WidgetType {
+  readonly language = locale.value
+
   constructor(
     readonly path: string,
     readonly label: string,
@@ -22,6 +25,7 @@ class ImagePreviewWidget extends WidgetType {
   eq(other: ImagePreviewWidget): boolean {
     return (
       this.path === other.path &&
+      this.language === other.language &&
       this.label === other.label &&
       this.url === other.url &&
       this.failed === other.failed
@@ -33,10 +37,10 @@ class ImagePreviewWidget extends WidgetType {
     container.className = 'cm-image-preview'
     const button = document.createElement('button')
     button.type = 'button'
-    button.setAttribute('aria-label', `查看${this.label}`)
+    button.setAttribute('aria-label', t('查看{value1}', { value1: this.label }))
     button.disabled = this.url === undefined || this.failed
     if (this.failed || this.url === undefined) {
-      button.textContent = this.failed ? '图片无法读取' : '图片加载中…'
+      button.textContent = this.failed ? t('图片无法读取') : t('图片加载中…')
     } else {
       const image = document.createElement('img')
       image.src = this.url
@@ -81,10 +85,7 @@ export function imagePreviews(
   return StateField.define<DecorationSet>({
     create: decorations,
     update(value, transaction) {
-      if (
-        transaction.docChanged ||
-        transaction.effects.some((effect) => effect.is(refreshImagePreviews))
-      ) {
+      if (transaction.docChanged || transaction.effects.some((effect) => effect.is(refreshImagePreviews))) {
         return decorations(transaction.state)
       }
       return value

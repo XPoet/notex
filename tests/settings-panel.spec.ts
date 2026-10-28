@@ -7,6 +7,7 @@ describe('SettingsPanel', () => {
     const wrapper = mount(SettingsPanel, {
       props: {
         settings: {
+          language: null,
           theme: 'system',
           noteSort: 'updatedAt',
           editorFontSize: 15,

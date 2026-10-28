@@ -24,6 +24,7 @@ vi.mock('vue-router', () => ({
 import SettingsView from '@/views/SettingsView.vue'
 
 const snapshot = {
+  language: 'zh-CN' as const,
   theme: 'system' as const,
   noteSort: 'updatedAt' as const,
   editorFontSize: 15 as const,
@@ -47,9 +48,7 @@ describe('SettingsView', () => {
 
   it('选择默认导出目录后将目录写入保存请求', async () => {
     settingsService.getSettings.mockResolvedValue(snapshot)
-    settingsService.chooseDefaultExportDirectory.mockResolvedValue(
-      '/Users/example/Documents/exports',
-    )
+    settingsService.chooseDefaultExportDirectory.mockResolvedValue('/Users/example/Documents/exports')
     settingsService.saveSettings.mockResolvedValue({
       ...snapshot,
       defaultExportDirectory: '/Users/example/Documents/exports',
@@ -61,8 +60,7 @@ describe('SettingsView', () => {
         stubs: {
           ManagementLayout: { template: '<main><slot /></main>' },
           SettingsPanel: {
-            template:
-              '<button @click="$emit(\'chooseDefaultExportDirectory\')">选择默认导出目录</button>',
+            template: '<button @click="$emit(\'chooseDefaultExportDirectory\')">选择默认导出目录</button>',
           },
         },
       },
@@ -73,6 +71,7 @@ describe('SettingsView', () => {
     await flushPromises()
 
     expect(settingsService.saveSettings).toHaveBeenCalledWith({
+      language: 'zh-CN',
       theme: 'system',
       noteSort: 'updatedAt',
       editorFontSize: 15,

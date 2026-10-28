@@ -7,6 +7,7 @@ import NoteImageViewer from './NoteImageViewer.vue'
 import { imagePreviews, refreshImagePreviews } from './imagePreviews'
 import { searchHighlights } from './searchHighlights'
 import { useNoteImages } from '@/composables/useNoteImages'
+import { locale } from '@/i18n'
 
 const props = defineProps<{
   modelValue: string
@@ -203,7 +204,7 @@ watch(
 )
 
 watch(
-  images,
+  [images, locale],
   () => {
     editorView.value?.dispatch({ effects: refreshImagePreviews.of(null) })
   },
@@ -218,11 +219,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="editorHost" class="markdown-editor">
-    <NoteImageViewer
-      :images="images"
-      :preview-path="previewPath"
-      @close="previewPath = undefined"
-    />
+    <NoteImageViewer :images="images" :preview-path="previewPath" @close="previewPath = undefined" />
   </div>
 </template>
 

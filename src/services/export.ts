@@ -1,12 +1,7 @@
+import { t } from '@/i18n'
 import { Channel, invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
-import type {
-  ExportError,
-  ExportErrorCode,
-  ExportProgress,
-  ExportRequest,
-  ExportResult,
-} from '@/types/export'
+import type { ExportError, ExportErrorCode, ExportProgress, ExportRequest, ExportResult } from '@/types/export'
 
 interface ErrorPayload {
   code?: unknown
@@ -56,7 +51,7 @@ async function call<T>(command: string, arguments_: Record<string, unknown> = {}
 
 export async function chooseExportDirectory(): Promise<string | undefined> {
   const selected = await open({
-    title: '选择 Markdown 导出位置',
+    title: t('选择 Markdown 导出位置'),
     directory: true,
     multiple: false,
     canCreateDirectories: true,

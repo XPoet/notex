@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t, localizeMessage } from '@/i18n'
 import { nextTick, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { showMainWindow } from '@/services/window'
@@ -48,15 +49,15 @@ onMounted(() => {
       @unlock="unlock"
     />
     <section v-else-if="status === 'failed'" class="diagnostic-panel">
-      <p class="eyebrow">启动诊断</p>
-      <h1 class="diagnostic-title">无法初始化本地数据</h1>
-      <p class="diagnostic-message">{{ error?.message }}</p>
-      <el-button type="primary" @click="initialize">重试</el-button>
+      <p class="eyebrow">{{ t('启动诊断') }}</p>
+      <h1 class="diagnostic-title">{{ t('无法初始化本地数据') }}</h1>
+      <p class="diagnostic-message">{{ localizeMessage(error?.message) }}</p>
+      <el-button type="primary" @click="initialize">{{ t('重试') }}</el-button>
     </section>
 
     <section v-else class="loading-panel">
       <span class="loading-icon" aria-hidden="true"></span>
-      <p class="loading-label">正在准备本地工作区…</p>
+      <p class="loading-label">{{ t('正在准备本地工作区…') }}</p>
     </section>
   </main>
 </template>

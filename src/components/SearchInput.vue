@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { Search } from '@element-plus/icons-vue'
 
 defineProps<{
@@ -16,7 +17,7 @@ const emit = defineEmits<{
     :model-value="modelValue"
     class="search-input"
     clearable
-    placeholder="搜索标题、正文、分类或标签"
+    :placeholder="t('搜索标题、正文、分类或标签')"
     @clear="emit('clear')"
     @update:model-value="emit('update:modelValue', $event)"
   >

@@ -1,30 +1,13 @@
 <script setup lang="ts">
-import {
-  Delete,
-  Download,
-  EditPen,
-  Folder,
-  Plus,
-  View,
-  WarningFilled,
-} from '@element-plus/icons-vue'
+import { t, localizeMessage } from '@/i18n'
+import { Delete, Download, EditPen, Folder, Plus, View, WarningFilled } from '@element-plus/icons-vue'
 import { computed, onMounted, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import type {
-  AllowDropType,
-  NodeDropType,
-  RenderContentContext,
-  TreeOptionProps,
-} from 'element-plus'
+import type { AllowDropType, NodeDropType, RenderContentContext, TreeOptionProps } from 'element-plus'
 import ManagementLayout from '@/layouts/ManagementLayout.vue'
 import ExportDialog from '@/features/export/ExportDialog.vue'
-import {
-  createCategory,
-  deleteCategory,
-  getCategoryDeleteImpact,
-  renameCategory,
-} from '@/services/categories'
+import { createCategory, deleteCategory, getCategoryDeleteImpact, renameCategory } from '@/services/categories'
 import { useCategoriesStore } from '@/stores/categories'
 import type { CategoryDeleteMode, CategoryNode } from '@/types/categories'
 import type { ExportScopeOption } from '@/types/export'
@@ -50,13 +33,13 @@ const exportScopeOptions = computed<ExportScopeOption[]>(() => {
   return [
     {
       scope: { kind: 'category', id: category.id },
-      title: '仅当前分类',
-      description: `导出「${category.name}」直属的笔记。`,
+      title: t('仅当前分类'),
+      description: t('导出「{value1}」直属的笔记。', { value1: category.name }),
     },
     {
       scope: { kind: 'categoryWithDescendants', id: category.id },
-      title: '当前分类及全部子分类',
-      description: '保留分类层级，并把图片统一放在导出根目录。',
+      title: t('当前分类及全部子分类'),
+      description: t('保留分类层级，并把图片统一放在导出根目录。'),
     },
   ]
 })
@@ -68,9 +51,9 @@ async function addCategory(parent?: CategoryNode): Promise<void> {
   let value: string
   try {
     ;({ value } = await ElMessageBox.prompt(
-      '输入分类名称。',
-      parent ? `在「${parent.name}」下新建分类` : '新建根分类',
-      { confirmButtonText: '创建', cancelButtonText: '取消' },
+      t('输入分类名称。'),
+      parent ? t('在「{value1}」下新建分类', { value1: parent.name }) : t('新建根分类'),
+      { confirmButtonText: t('创建'), cancelButtonText: t('取消') },
     ))
   } catch {
     return
@@ -87,11 +70,15 @@ async function addCategory(parent?: CategoryNode): Promise<void> {
 async function rename(category: CategoryNode): Promise<void> {
   let value: string
   try {
-    ;({ value } = await ElMessageBox.prompt('输入新的分类名称。', `重命名「${category.name}」`, {
-      inputValue: category.name,
-      confirmButtonText: '保存',
-      cancelButtonText: '取消',
-    }))
+    ;({ value } = await ElMessageBox.prompt(
+      t('输入新的分类名称。'),
+      t('重命名「{value1}」', { value1: category.name }),
+      {
+        inputValue: category.name,
+        confirmButtonText: t('保存'),
+        cancelButtonText: t('取消'),
+      },
+    ))
   } catch {
     return
   }
@@ -107,9 +94,13 @@ async function rename(category: CategoryNode): Promise<void> {
 async function remove(category: CategoryNode): Promise<void> {
   const impact = await getCategoryDeleteImpact(category.id)
   const shouldDelete = await ElMessageBox.confirm(
-    `直属笔记 ${impact.directNoteCount} 条，子分类 ${impact.childCategoryCount} 个，分支内共 ${impact.branchNoteCount} 条笔记。`,
-    `删除「${category.name}」`,
-    { confirmButtonText: '继续', cancelButtonText: '取消', type: 'warning' },
+    t('直属笔记 {value1} 条，子分类 {value2} 个，分支内共 {value3} 条笔记。', {
+      value1: impact.directNoteCount,
+      value2: impact.childCategoryCount,
+      value3: impact.branchNoteCount,
+    }),
+    t('删除「{value1}」', { value1: category.name }),
+    { confirmButtonText: t('继续'), cancelButtonText: t('取消'), type: 'warning' },
   )
     .then(() => true)
     .catch(() => false)
@@ -117,19 +108,17 @@ async function remove(category: CategoryNode): Promise<void> {
     return
   }
   const mode = await ElMessageBox.confirm(
-    '删除整个分支会把分支内笔记移入回收站；取消则仅删除当前分类并提升直属内容。',
-    '选择删除方式',
+    t('删除整个分支会把分支内笔记移入回收站；取消则仅删除当前分类并提升直属内容。'),
+    t('选择删除方式'),
     {
-      confirmButtonText: '删除整个分支',
-      cancelButtonText: '仅删除当前分类',
+      confirmButtonText: t('删除整个分支'),
+      cancelButtonText: t('仅删除当前分类'),
       distinguishCancelAndClose: true,
       type: 'warning',
     },
   )
     .then((): CategoryDeleteMode => 'branch')
-    .catch((reason: unknown): CategoryDeleteMode | undefined =>
-      reason === 'cancel' ? 'current' : undefined,
-    )
+    .catch((reason: unknown): CategoryDeleteMode | undefined => (reason === 'cancel' ? 'current' : undefined))
   if (mode === undefined) {
     return
   }
@@ -158,7 +147,7 @@ async function handleDrop(
   isSubmitting.value = true
   try {
     await categoriesStore.move(draggingNode.data.id, parentId, orderedIds)
-    ElMessage.success('分类已移动')
+    ElMessage.success(t('分类已移动'))
   } catch (error: unknown) {
     treeData.value = cloneCategories(categoriesStore.categories)
     ElMessage.error(categoryErrorMessage(error))
@@ -167,11 +156,7 @@ async function handleDrop(
   }
 }
 
-function allowDrop(
-  draggingNode: CategoryTreeNode,
-  dropNode: CategoryTreeNode,
-  type: AllowDropType,
-): boolean {
+function allowDrop(draggingNode: CategoryTreeNode, dropNode: CategoryTreeNode, type: AllowDropType): boolean {
   if (isSubmitting.value) {
     return false
   }
@@ -208,15 +193,10 @@ function findCategory(categories: CategoryNode[], id: string): CategoryNode | un
 }
 
 function categoryErrorMessage(error: unknown): string {
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'message' in error &&
-    typeof error.message === 'string'
-  ) {
-    return error.message
+  if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string') {
+    return localizeMessage(error.message)
   }
-  return '分类移动失败。'
+  return t('分类移动失败。')
 }
 
 function viewNotes(category: CategoryNode): void {
@@ -251,38 +231,37 @@ onMounted(() => {
 
 <template>
   <ManagementLayout
-    title="分类管理"
-    description="最多五级，拖拽调整结构；同级分类名称不可重复。"
+    :title="t('分类管理')"
+    :description="t('最多五级，拖拽调整结构；同级分类名称不可重复。')"
     :categories="categoriesStore.categories"
     @create="createNoteFromSidebar"
   >
     <template #action>
-      <el-button type="primary" :icon="Plus" :loading="isSubmitting" @click="addCategory()">
-        新建分类
-      </el-button>
+      <el-button type="primary" :icon="Plus" :loading="isSubmitting" @click="addCategory()">{{
+        t('新建分类')
+      }}</el-button>
     </template>
 
     <p v-if="categoriesStore.error" class="management-error" role="alert">
-      {{ categoriesStore.error.message }}
+      {{ localizeMessage(categoriesStore.error.message) }}
     </p>
     <el-empty
       v-else-if="!categoriesStore.isLoading && categoriesStore.categories.length === 0"
       class="management-empty"
-      description="还没有分类"
+      :description="t('还没有分类')"
     >
-      <el-button type="primary" @click="addCategory()">新建第一个分类</el-button>
+      <el-button type="primary" @click="addCategory()">{{ t('新建第一个分类') }}</el-button>
     </el-empty>
     <template v-else>
       <p class="category-notice" role="note">
-        <el-icon><WarningFilled /></el-icon>
-        调整分类后，系统会校验五级限制、同级名称和循环引用。
+        <el-icon><WarningFilled /></el-icon>{{ t('调整分类后，系统会校验五级限制、同级名称和循环引用。') }}
       </p>
       <section class="category-workspace">
         <section class="category-tree-panel">
           <header class="category-panel-header">
             <div>
-              <h2 class="category-panel-title">分类树</h2>
-              <p class="category-panel-copy">拖拽分类可移动或调整排序</p>
+              <h2 class="category-panel-title">{{ t('分类树') }}</h2>
+              <p class="category-panel-copy">{{ t('拖拽分类可移动或调整排序') }}</p>
             </div>
             <span class="category-panel-count">{{ categoriesStore.categories.length }}</span>
           </header>
@@ -312,39 +291,38 @@ onMounted(() => {
 
         <section class="category-detail-panel">
           <template v-if="selectedCategory">
-            <p class="category-detail-eyebrow">当前分类</p>
+            <p class="category-detail-eyebrow">{{ t('当前分类') }}</p>
             <h2 class="category-detail-title">{{ selectedCategory.name }}</h2>
             <p class="category-detail-path">{{ selectedCategory.path }}</p>
             <dl class="category-detail-stats">
               <div>
-                <dt>层级</dt>
-                <dd>第 {{ selectedCategory.level }} 级</dd>
+                <dt>{{ t('层级') }}</dt>
+                <dd>{{ t('第 {value1} 级', { value1: selectedCategory.level }) }}</dd>
               </div>
               <div>
-                <dt>包含笔记</dt>
-                <dd>{{ selectedCategory.noteCount }} 篇</dd>
+                <dt>{{ t('包含笔记') }}</dt>
+                <dd>{{ t('{value1} 篇', { value1: selectedCategory.noteCount }) }}</dd>
               </div>
             </dl>
             <div class="category-detail-actions">
-              <el-button type="primary" :icon="View" @click="viewNotes(selectedCategory)">
-                查看笔记
-              </el-button>
+              <el-button type="primary" :icon="View" @click="viewNotes(selectedCategory)">{{
+                t('查看笔记')
+              }}</el-button>
               <el-button
                 :disabled="isSubmitting || selectedCategory.level >= 5"
                 :icon="Plus"
                 @click="addCategory(selectedCategory)"
+                >{{ t('新建子分类') }}</el-button
               >
-                新建子分类
-              </el-button>
-              <el-button :disabled="isSubmitting" :icon="EditPen" @click="rename(selectedCategory)">
-                重命名
-              </el-button>
-              <el-button :icon="Download" @click="openExport(selectedCategory)"> 导出 </el-button>
+              <el-button :disabled="isSubmitting" :icon="EditPen" @click="rename(selectedCategory)">{{
+                t('重命名')
+              }}</el-button>
+              <el-button :icon="Download" @click="openExport(selectedCategory)">{{ t('导出') }}</el-button>
             </div>
             <div class="category-danger-zone">
               <div>
-                <h3 class="category-danger-title">危险操作</h3>
-                <p class="category-danger-copy">删除前会显示直属内容、子分类和分支笔记数量。</p>
+                <h3 class="category-danger-title">{{ t('危险操作') }}</h3>
+                <p class="category-danger-copy">{{ t('删除前会显示直属内容、子分类和分支笔记数量。') }}</p>
               </div>
               <el-button
                 type="danger"
@@ -352,14 +330,13 @@ onMounted(() => {
                 :disabled="isSubmitting"
                 :icon="Delete"
                 @click="remove(selectedCategory)"
+                >{{ t('删除分类') }}</el-button
               >
-                删除分类
-              </el-button>
             </div>
           </template>
           <div v-else class="category-detail-empty">
             <el-icon><Folder /></el-icon>
-            <p>从左侧选择一个分类以查看详情</p>
+            <p>{{ t('从左侧选择一个分类以查看详情') }}</p>
           </div>
         </section>
       </section>

@@ -99,6 +99,7 @@ describe('ExportDialog', () => {
     setActivePinia(pinia)
     useSettingsStore().snapshot = {
       theme: 'system',
+      language: 'zh-CN',
       noteSort: 'updatedAt',
       editorFontSize: 15,
       showCategoryCounts: true,

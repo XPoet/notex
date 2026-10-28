@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -71,10 +71,33 @@
       <main id="app-startup-splash" class="startup-splash" aria-live="polite">
         <section class="startup-splash__panel">
           <span class="startup-splash__spinner" aria-hidden="true"></span>
-          <p class="startup-splash__label">正在准备本地工作区…</p>
+          <p class="startup-splash__label">Preparing your local workspace…</p>
         </section>
       </main>
     </div>
+    <script id="startup-language">
+      ;(() => {
+        const parts = (navigator.language || '').trim().replaceAll('_', '-').toLowerCase().split('-')
+        let language = 'en'
+        if (parts[0] === 'zh') {
+          language =
+            parts.includes('hant') ||
+            (!parts.includes('hans') && parts.some((part) => ['tw', 'hk', 'mo'].includes(part)))
+              ? 'zh-TW'
+              : 'zh-CN'
+        }
+        try {
+          const saved = localStorage.getItem('notex.language')
+          if (['zh-CN', 'zh-TW', 'en'].includes(saved)) language = saved
+        } catch {}
+        document.documentElement.lang = language
+        document.querySelector('.startup-splash__label').textContent = {
+          en: 'Preparing your local workspace…',
+          'zh-CN': '正在准备本地工作区…',
+          'zh-TW': '正在準備本機工作區…',
+        }[language]
+      })()
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

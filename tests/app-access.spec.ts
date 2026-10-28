@@ -34,7 +34,7 @@ describe('启动访问控制', () => {
     services.getAccessStatus.mockReset()
     services.unlockApp.mockReset()
     services.bootstrapApp.mockResolvedValue({ status: 'ready', schemaVersion: 3 })
-    services.getSettings.mockResolvedValue({ theme: 'light', editorFontSize: 15 })
+    services.getSettings.mockResolvedValue({ language: 'zh-CN', theme: 'light', editorFontSize: 15 })
   })
 
   it('配置了密码时停留在解锁状态，不初始化笔记工作区或读取设置', async () => {

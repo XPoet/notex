@@ -2,7 +2,9 @@ use std::collections::HashMap;
 
 use rusqlite::{Connection, OptionalExtension, params};
 
-use crate::domain::settings::{NoteSort, SaveSettingsRequest, SettingsError, ThemePreference};
+use crate::domain::settings::{
+    AppLanguage, NoteSort, SaveSettingsRequest, SettingsError, ThemePreference,
+};
 
 pub struct SettingsRepository;
 
@@ -44,6 +46,7 @@ impl SettingsRepository {
             .transaction()
             .map_err(|_| SettingsError::SaveFailed)?;
         for (key, value) in [
+            ("language", request.language.as_str()),
             ("theme", request.theme.as_str()),
             ("note_sort", request.note_sort.as_str()),
             ("editor_font_size", &request.editor_font_size.to_string()),
@@ -97,6 +100,12 @@ impl SettingsRepository {
             .map_or(ThemePreference::System, |value| {
                 ThemePreference::from_stored(value)
             })
+    }
+
+    pub fn language(values: &HashMap<String, String>) -> Option<AppLanguage> {
+        values
+            .get("language")
+            .and_then(|value| AppLanguage::from_stored(value))
     }
 
     pub fn editor_font_size(values: &HashMap<String, String>) -> u8 {

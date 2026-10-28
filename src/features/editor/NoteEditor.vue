@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t, locale } from '@/i18n'
 import {
   Calendar,
   Clock,
@@ -49,22 +50,23 @@ const emit = defineEmits<{
 const titleInput = useTemplateRef<{ focus: () => void }>('titleInput')
 const markdownEditor = useTemplateRef<{ focus: () => void }>('markdownEditor')
 const noteId = computed(() => props.note?.id)
-const noteCategoryPath = computed(
-  () => findCategoryPath(props.categories, props.note?.categoryId) ?? '未分类',
-)
+const noteCategoryPath = computed(() => findCategoryPath(props.categories, props.note?.categoryId) ?? t('未分类'))
 const noteTags = computed(() => props.tags.filter((tag) => props.selectedTagIds.includes(tag.id)))
-const timestampFormatter = new Intl.DateTimeFormat('zh-CN', {
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-})
+const timestampFormatter = computed(
+  () =>
+    new Intl.DateTimeFormat(locale.value, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
+)
 const createdLabel = computed(() =>
-  props.note === undefined ? '' : timestampFormatter.format(new Date(props.note.createdAt)),
+  props.note === undefined ? '' : timestampFormatter.value.format(new Date(props.note.createdAt)),
 )
 const updatedLabel = computed(() =>
-  props.note === undefined ? '' : timestampFormatter.format(new Date(props.note.updatedAt)),
+  props.note === undefined ? '' : timestampFormatter.value.format(new Date(props.note.updatedAt)),
 )
 
 watch(noteId, () => {
@@ -107,9 +109,9 @@ async function copyContent(): Promise<void> {
 
   try {
     await copyText(props.note.content)
-    ElMessage.success('笔记内容已复制。')
+    ElMessage.success(t('笔记内容已复制。'))
   } catch {
-    ElMessage.error('复制失败，请重试。')
+    ElMessage.error(t('复制失败，请重试。'))
   }
 }
 
@@ -124,8 +126,8 @@ defineExpose({ focusEditor })
           ref="titleInput"
           class="note-title-input"
           :model-value="note.title"
-          placeholder="无标题笔记"
-          aria-label="笔记标题"
+          :placeholder="t('无标题笔记')"
+          :aria-label="t('笔记标题')"
           @update:model-value="updateTitle"
         />
         <div class="note-editor-toolbar">
@@ -134,7 +136,7 @@ defineExpose({ focusEditor })
               <el-icon aria-hidden="true"><Folder /></el-icon>
               <span>{{ noteCategoryPath }}</span>
             </p>
-            <div v-if="noteTags.length > 0" class="note-editor-tags" aria-label="笔记标签">
+            <div v-if="noteTags.length > 0" class="note-editor-tags" :aria-label="t('笔记标签')">
               <span v-for="tag in noteTags" :key="tag.id" class="note-editor-tag" :title="tag.name">
                 #{{ tag.name }}
               </span>
@@ -142,12 +144,12 @@ defineExpose({ focusEditor })
           </div>
           <p class="note-editor-time note-editor-created">
             <el-icon aria-hidden="true"><Calendar /></el-icon>
-            <span>创建于</span>
+            <span>{{ t('创建于') }}</span>
             <time :datetime="note.createdAt">{{ createdLabel }}</time>
           </p>
           <p class="note-editor-time note-editor-updated">
             <el-icon aria-hidden="true"><Clock /></el-icon>
-            <span>更新于</span>
+            <span>{{ t('更新于') }}</span>
             <time :datetime="note.updatedAt">{{ updatedLabel }}</time>
           </p>
           <div class="note-editor-actions">
@@ -155,16 +157,16 @@ defineExpose({ focusEditor })
               text
               circle
               :icon="CopyDocument"
-              title="复制笔记内容"
-              aria-label="复制笔记内容"
+              :title="t('复制笔记内容')"
+              :aria-label="t('复制笔记内容')"
               @click="copyContent"
             />
             <el-button
               text
               circle
               :icon="note.isPinned ? StarFilled : Star"
-              :title="note.isPinned ? '取消置顶' : '置顶笔记'"
-              :aria-label="note.isPinned ? '取消置顶' : '置顶笔记'"
+              :title="note.isPinned ? t('取消置顶') : t('置顶笔记')"
+              :aria-label="note.isPinned ? t('取消置顶') : t('置顶笔记')"
               :aria-pressed="note.isPinned"
               @click="emit('togglePin')"
             />
@@ -172,8 +174,8 @@ defineExpose({ focusEditor })
               text
               circle
               :icon="Download"
-              title="导出笔记"
-              aria-label="导出笔记"
+              :title="t('导出笔记')"
+              :aria-label="t('导出笔记')"
               @click="emit('export')"
             />
             <el-button
@@ -181,19 +183,13 @@ defineExpose({ focusEditor })
               type="danger"
               circle
               :icon="Delete"
-              title="移入回收站"
-              aria-label="移入回收站"
+              :title="t('移入回收站')"
+              :aria-label="t('移入回收站')"
               @click="emit('trash')"
             />
             <el-popover placement="bottom-end" :width="360" trigger="click">
               <template #reference>
-                <el-button
-                  text
-                  circle
-                  :icon="MoreFilled"
-                  title="分类与标签"
-                  aria-label="分类与标签"
-                />
+                <el-button text circle :icon="MoreFilled" :title="t('分类与标签')" :aria-label="t('分类与标签')" />
               </template>
               <NoteMetadata
                 :categories="categories"
@@ -223,16 +219,11 @@ defineExpose({ focusEditor })
         />
       </div>
     </div>
-    <EditorStatusBar
-      :content="note.content"
-      :save-status="saveStatus"
-      :save-error="saveError"
-      @retry="emit('retry')"
-    />
+    <EditorStatusBar :content="note.content" :save-status="saveStatus" :save-error="saveError" @retry="emit('retry')" />
   </section>
   <section v-else class="editor-empty-state">
-    <h1 class="editor-empty-title">打开即记</h1>
-    <p class="editor-empty-copy">从左侧新建一条笔记，纯文本和图片都会保存在本机。</p>
+    <h1 class="editor-empty-title">{{ t('打开即记') }}</h1>
+    <p class="editor-empty-copy">{{ t('从左侧新建一条笔记，纯文本和图片都会保存在本机。') }}</p>
   </section>
 </template>
 

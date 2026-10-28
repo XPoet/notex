@@ -1,11 +1,7 @@
+import { t } from '@/i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
-import type {
-  SaveSettingsRequest,
-  SettingsError,
-  SettingsErrorCode,
-  SettingsSnapshot,
-} from '@/types/settings'
+import type { SaveSettingsRequest, SettingsError, SettingsErrorCode, SettingsSnapshot } from '@/types/settings'
 
 interface ErrorPayload {
   code?: unknown
@@ -30,11 +26,7 @@ function isErrorPayload(value: unknown): value is ErrorPayload {
 }
 
 export function toSettingsError(error: unknown): SettingsError {
-  if (
-    isErrorPayload(error) &&
-    isSettingsErrorCode(error.code) &&
-    typeof error.message === 'string'
-  ) {
+  if (isErrorPayload(error) && isSettingsErrorCode(error.code) && typeof error.message === 'string') {
     return {
       code: error.code,
       message: error.message,
@@ -65,7 +57,7 @@ export function openDataDirectory(): Promise<void> {
 
 export async function chooseDefaultExportDirectory(): Promise<string | undefined> {
   const directory = await open({
-    title: '选择默认 Markdown 导出目录',
+    title: t('选择默认 Markdown 导出目录'),
     directory: true,
     multiple: false,
     canCreateDirectories: true,

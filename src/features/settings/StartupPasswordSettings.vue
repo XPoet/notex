@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t, localizeMessage } from '@/i18n'
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { InputInstance } from 'element-plus'
@@ -17,8 +18,8 @@ const currentInput = ref<InputInstance>()
 const newInput = ref<InputInstance>()
 const passwordEnabled = computed(() => securityStore.snapshot?.passwordEnabled ?? false)
 const title = computed(() => {
-  if (action.value === 'disable') return '关闭开启密码'
-  return action.value === 'change' ? '修改开启密码' : '设置开启密码'
+  if (action.value === 'disable') return t('关闭开启密码')
+  return action.value === 'change' ? t('修改开启密码') : t('设置开启密码')
 })
 
 function clearPasswords(): void {
@@ -46,17 +47,17 @@ async function submit(): Promise<void> {
   validationError.value = ''
   securityStore.clearError()
   if (passwordEnabled.value && !currentPassword.value) {
-    validationError.value = '请输入当前密码。'
+    validationError.value = t('请输入当前密码。')
     return
   }
   if (action.value !== 'disable') {
     const length = Array.from(newPassword.value).length
     if (length < 4 || length > 20 || newPassword.value.trim().length === 0) {
-      validationError.value = '密码需为 4～20 个字符，且不能全部为空白。'
+      validationError.value = t('密码需为 4～20 个字符，且不能全部为空白。')
       return
     }
     if (newPassword.value !== confirmation.value) {
-      validationError.value = '两次输入的新密码不一致。'
+      validationError.value = t('两次输入的新密码不一致。')
       return
     }
   }
@@ -69,8 +70,8 @@ async function submit(): Promise<void> {
     clearPasswords()
     ElMessage.success(
       action.value === 'disable'
-        ? '已关闭开启密码，自动备份已去除密码。'
-        : '开启密码与自动备份已更新，下次启动时生效。',
+        ? t('已关闭开启密码，自动备份已去除密码。')
+        : t('开启密码与自动备份已更新，下次启动时生效。'),
     )
   } catch {
     currentPassword.value = ''
@@ -84,26 +85,22 @@ onBeforeUnmount(clearPasswords)
 <template>
   <article class="password-settings">
     <header>
-      <h2>安全</h2>
-      <p>配置启动和自动备份使用的密码。</p>
+      <h2>{{ t('安全') }}</h2>
+      <p>{{ t('配置启动和自动备份使用的密码。') }}</p>
     </header>
     <div class="password-row">
       <span>
-        <strong>开启密码</strong>
+        <strong>{{ t('开启密码') }}</strong>
         <small>{{
-          passwordEnabled
-            ? '已开启，每次启动需输入密码，自动备份使用相同密码。'
-            : '未设置，打开软件可直接使用。'
+          passwordEnabled ? t('已开启，每次启动需输入密码，自动备份使用相同密码。') : t('未设置，打开软件可直接使用。')
         }}</small>
       </span>
       <div class="password-actions">
         <template v-if="passwordEnabled">
-          <el-button @click="open('change')">修改密码</el-button>
-          <el-button @click="open('disable')">关闭密码</el-button>
+          <el-button @click="open('change')">{{ t('修改密码') }}</el-button>
+          <el-button @click="open('disable')">{{ t('关闭密码') }}</el-button>
         </template>
-        <el-button v-else :disabled="!securityStore.snapshot" @click="open('set')"
-          >设置密码</el-button
-        >
+        <el-button v-else :disabled="!securityStore.snapshot" @click="open('set')">{{ t('设置密码') }}</el-button>
       </div>
     </div>
   </article>
@@ -122,7 +119,7 @@ onBeforeUnmount(clearPasswords)
   >
     <form class="password-form" @submit.prevent="submit">
       <template v-if="passwordEnabled">
-        <label for="current-startup-password">当前密码</label>
+        <label for="current-startup-password">{{ t('当前密码') }}</label>
         <el-input
           id="current-startup-password"
           ref="currentInput"
@@ -134,18 +131,18 @@ onBeforeUnmount(clearPasswords)
         />
       </template>
       <template v-if="action !== 'disable'">
-        <label for="new-startup-password">{{ passwordEnabled ? '新密码' : '开启密码' }}</label>
+        <label for="new-startup-password">{{ passwordEnabled ? t('新密码') : t('开启密码') }}</label>
         <el-input
           id="new-startup-password"
           ref="newInput"
           v-model="newPassword"
           type="password"
           autocomplete="new-password"
-          placeholder="4～20 个字符"
+          :placeholder="t('4～20 个字符')"
           show-password
           :disabled="securityStore.isSaving"
         />
-        <label for="confirm-startup-password">确认密码</label>
+        <label for="confirm-startup-password">{{ t('确认密码') }}</label>
         <el-input
           id="confirm-startup-password"
           v-model="confirmation"
@@ -155,19 +152,19 @@ onBeforeUnmount(clearPasswords)
           :disabled="securityStore.isSaving"
         />
         <p class="password-hint">
-          自动备份压缩包会同步使用此密码。请牢记密码，忘记后无法通过软件找回。本地数据库和原始图片不加密。
+          {{ t('自动备份压缩包会同步使用此密码。请牢记密码，忘记后无法通过软件找回。本地数据库和原始图片不加密。') }}
         </p>
       </template>
       <p v-else class="password-hint">
-        关闭后，下次打开 NoteX 将直接进入工作区，自动备份压缩包也将去除密码。
+        {{ t('关闭后，下次打开 NoteX 将直接进入工作区，自动备份压缩包也将去除密码。') }}
       </p>
       <p v-if="validationError || securityStore.error" class="password-error" role="alert">
-        {{ validationError || securityStore.error?.message }}
+        {{ localizeMessage(validationError || securityStore.error?.message) }}
       </p>
       <footer>
-        <el-button :disabled="securityStore.isSaving" @click="visible = false">取消</el-button>
+        <el-button :disabled="securityStore.isSaving" @click="visible = false">{{ t('取消') }}</el-button>
         <el-button type="primary" native-type="submit" :loading="securityStore.isSaving">
-          {{ action === 'disable' ? '关闭密码' : '保存密码' }}
+          {{ action === 'disable' ? t('关闭密码') : t('保存密码') }}
         </el-button>
       </footer>
     </form>

@@ -10,8 +10,11 @@ const settingsService = vi.hoisted(() => ({
 vi.mock('@/services/settings', () => settingsService)
 
 import { useSettingsStore } from '@/stores/settings'
+import { locale } from '@/i18n'
+import { LANGUAGE_STORAGE_KEY } from '@/i18n/locale'
 
 const snapshot = {
+  language: 'zh-CN' as const,
   theme: 'dark' as const,
   noteSort: 'title' as const,
   editorFontSize: 17 as const,
@@ -90,6 +93,7 @@ describe('settings store', () => {
     const store = useSettingsStore()
 
     await store.save({
+      language: 'zh-CN',
       theme: 'dark',
       noteSort: 'title',
       editorFontSize: 17,
@@ -99,5 +103,44 @@ describe('settings store', () => {
 
     expect(settingsService.saveSettings).toHaveBeenCalled()
     expect(store.snapshot).toEqual(snapshot)
+  })
+
+  it('未保存语言时默认选择系统语种，无法匹配时选择英语', async () => {
+    const language = vi.spyOn(navigator, 'language', 'get').mockReturnValue('zh-Hant-HK')
+    settingsService.getSettings.mockResolvedValue({ ...snapshot, language: null })
+    await useSettingsStore().load()
+    expect(locale.value).toBe('zh-TW')
+    expect(document.documentElement.lang).toBe('zh-TW')
+
+    setActivePinia(createPinia())
+    language.mockReturnValue('fr-FR')
+    await useSettingsStore().load()
+    expect(locale.value).toBe('en')
+    language.mockRestore()
+  })
+
+  it('保存成功后立即切换语言，并为下次解锁前的界面缓存语种', async () => {
+    settingsService.getSettings.mockResolvedValue(snapshot)
+    const store = useSettingsStore()
+    await store.load()
+    settingsService.saveSettings.mockResolvedValue({ ...snapshot, language: 'en' })
+    await store.save({ ...snapshot, language: 'en' })
+
+    expect(locale.value).toBe('en')
+    expect(document.documentElement.lang).toBe('en')
+    expect(localStorage.getItem(LANGUAGE_STORAGE_KEY)).toBe('en')
+  })
+
+  it('保存失败保留当前语言与缓存', async () => {
+    settingsService.getSettings.mockResolvedValue(snapshot)
+    const store = useSettingsStore()
+    await store.load()
+    settingsService.saveSettings.mockRejectedValue({ code: 'SETTINGS_SAVE_FAILED' })
+    await expect(store.save({ ...snapshot, language: 'en' })).rejects.toMatchObject({
+      code: 'SETTINGS_SAVE_FAILED',
+    })
+    expect(locale.value).toBe('zh-CN')
+    expect(localStorage.getItem(LANGUAGE_STORAGE_KEY)).toBe('zh-CN')
+    expect(store.snapshot?.language).toBe('zh-CN')
   })
 })

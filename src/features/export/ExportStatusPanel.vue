@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t, localizeMessage } from '@/i18n'
 import { CircleCheckFilled, InfoFilled, WarningFilled } from '@element-plus/icons-vue'
 import { computed } from 'vue'
 import type { ExportError, ExportProgress, ExportResult, ExportStatus } from '@/types/export'
@@ -27,21 +28,29 @@ const progressPercent = computed(() => {
 const progressDetail = computed(() => {
   const progress = props.progress
   if (progress === undefined) {
-    return '正在准备导出任务。'
+    return t('正在准备导出任务。')
   }
   const currentTitle = progress.currentTitle ? ` · ${progress.currentTitle}` : ''
-  return `已处理 ${progress.processed} / ${progress.total} 篇笔记${currentTitle}`
+  return t('已处理 {value1} / {value2} 篇笔记{value3}', {
+    value1: progress.processed,
+    value2: progress.total,
+    value3: currentTitle,
+  })
 })
 
-const completionTitle = computed(() => (props.result?.cancelled ? '导出已取消' : '导出完成'))
+const completionTitle = computed(() => (props.result?.cancelled ? t('导出已取消') : t('导出完成')))
 
 const completionCopy = computed(() => {
   const result = props.result
   if (result === undefined) {
     return ''
   }
-  const issueCopy = result.issues.length > 0 ? `，另有 ${result.issues.length} 项需要留意` : ''
-  return `已导出 ${result.exportedCount} 篇笔记，失败 ${result.failedCount} 篇${issueCopy}。`
+  const issueCopy = result.issues.length > 0 ? t('，另有 {value1} 项需要留意', { value1: result.issues.length }) : ''
+  return t('已导出 {value1} 篇笔记，失败 {value2} 篇{value3}。', {
+    value1: result.exportedCount,
+    value2: result.failedCount,
+    value3: issueCopy,
+  })
 })
 </script>
 
@@ -50,7 +59,7 @@ const completionCopy = computed(() => {
     <template v-if="status === 'exporting'">
       <article class="export-status-card export-status-card--progress">
         <header class="export-status-card-header">
-          <strong>正在导出…</strong>
+          <strong>{{ t('正在导出…') }}</strong>
           <span>{{ progressPercent }}%</span>
         </header>
         <div
@@ -79,7 +88,7 @@ const completionCopy = computed(() => {
           :disabled="isOpeningDirectory"
           @click="emit('openDirectory')"
         >
-          {{ isOpeningDirectory ? '正在打开…' : '打开导出目录 →' }}
+          {{ isOpeningDirectory ? t('正在打开…') : t('打开导出目录 →') }}
         </button>
       </article>
     </template>
@@ -88,15 +97,15 @@ const completionCopy = computed(() => {
       <article class="export-status-card export-status-card--failure">
         <header class="export-status-result-header">
           <el-icon><WarningFilled /></el-icon>
-          <strong>导出失败</strong>
+          <strong>{{ t('导出失败') }}</strong>
         </header>
-        <p>{{ error?.message ?? '导出未完成，请选择其他目录后重试。' }}</p>
+        <p>{{ localizeMessage(error?.message ?? t('导出未完成，请选择其他目录后重试。')) }}</p>
         <button
           class="export-status-action export-status-action--failure"
           type="button"
           @click="emit('chooseDirectory')"
         >
-          重新选择目录
+          {{ t('重新选择目录') }}
         </button>
       </article>
     </template>
@@ -105,9 +114,9 @@ const completionCopy = computed(() => {
       <article class="export-status-card export-status-card--ready">
         <header class="export-status-result-header">
           <el-icon><InfoFilled /></el-icon>
-          <strong>等待开始导出</strong>
+          <strong>{{ t('等待开始导出') }}</strong>
         </header>
-        <p>确认导出范围与目录后开始。导出不会修改原始笔记。</p>
+        <p>{{ t('确认导出范围与目录后开始。导出不会修改原始笔记。') }}</p>
       </article>
     </template>
   </section>
