@@ -1,19 +1,7 @@
 import { defineStore } from 'pinia'
 import { shallowRef } from 'vue'
-import {
-  cancelExport,
-  chooseExportDirectory,
-  exportNotes,
-  openExportDirectory,
-  toExportError,
-} from '@/services/export'
-import type {
-  ExportError,
-  ExportProgress,
-  ExportResult,
-  ExportScope,
-  ExportStatus,
-} from '@/types/export'
+import { cancelExport, chooseExportDirectory, exportNotes, openExportDirectory, toExportError } from '@/services/export'
+import type { ExportError, ExportProgress, ExportResult, ExportScope, ExportStatus } from '@/types/export'
 
 export const useExportStore = defineStore('export', () => {
   const status = shallowRef<ExportStatus>('idle')

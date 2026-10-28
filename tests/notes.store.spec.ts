@@ -137,9 +137,7 @@ describe('notes store', () => {
     const firstSummary = { ...summary, id: 'first-category-note', title: '首条分类笔记' }
     const firstNote = { ...note, id: firstSummary.id, title: firstSummary.title }
     categoriesService.listNotesByCategory.mockResolvedValue([firstSummary, summary])
-    notesService.getNote.mockImplementation((id: string) =>
-      Promise.resolve(id === note.id ? note : firstNote),
-    )
+    notesService.getNote.mockImplementation((id: string) => Promise.resolve(id === note.id ? note : firstNote))
     notesService.saveNote.mockResolvedValue({ ...note, title: '已编辑分类笔记' })
 
     await store.loadByCategory('category-1')

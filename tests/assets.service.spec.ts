@@ -13,9 +13,7 @@ describe('本地图片读取 Service', () => {
 
   it.each(['ArrayBuffer', 'macOS 数字数组'])('将 %s 响应保留为原始图片字节', async (transport) => {
     const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 255, 128])
-    vi.mocked(invoke).mockResolvedValue(
-      transport === 'ArrayBuffer' ? bytes.buffer : Array.from(bytes),
-    )
+    vi.mocked(invoke).mockResolvedValue(transport === 'ArrayBuffer' ? bytes.buffer : Array.from(bytes))
     expect(await loadNoteImage('note', 'assets/a.jpg')).toBe('blob:preview')
     expect(invoke).toHaveBeenCalledWith('read_note_image', {
       noteId: 'note',

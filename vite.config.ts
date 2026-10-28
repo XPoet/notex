@@ -31,10 +31,7 @@ const elementPlusStyles = [
 export default defineConfig({
   optimizeDeps: {
     // 组件插件在转换模板时才生成这些导入；提前优化可避免冷启动时多次刷新。
-    include: [
-      'element-plus/es',
-      ...elementPlusStyles.map((name) => `element-plus/es/components/${name}/style/index`),
-    ],
+    include: ['element-plus/es', ...elementPlusStyles.map((name) => `element-plus/es/components/${name}/style/index`)],
   },
   css: {
     preprocessorOptions: {

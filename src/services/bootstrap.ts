@@ -23,11 +23,7 @@ function isBootstrapErrorCode(value: unknown): value is BootstrapErrorCode {
 }
 
 export function toBootstrapError(error: unknown): BootstrapError {
-  if (
-    isTauriErrorPayload(error) &&
-    isBootstrapErrorCode(error.code) &&
-    typeof error.message === 'string'
-  ) {
+  if (isTauriErrorPayload(error) && isBootstrapErrorCode(error.code) && typeof error.message === 'string') {
     return {
       code: error.code,
       message: error.message,

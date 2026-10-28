@@ -22,21 +22,13 @@ describe('Element Plus 编程式服务样式', () => {
   })
 
   it('通过 Sass 变量生成 Element Plus 主题样式', () => {
-    expect(elementThemeSource).toContain(
-      "@forward 'element-plus/theme-chalk/src/common/var.scss' with",
-    )
+    expect(elementThemeSource).toContain("@forward 'element-plus/theme-chalk/src/common/var.scss' with")
     expect(elementThemeSource).toContain("'primary':")
     expect(elementThemeSource).toContain('$font-family:')
-    expect(elementDarkThemeSource).toContain(
-      "@forward 'element-plus/theme-chalk/src/dark/var.scss' with",
-    )
-    expect(elementDarkThemeSource).toContain(
-      "@use 'element-plus/theme-chalk/src/dark/css-vars.scss';",
-    )
+    expect(elementDarkThemeSource).toContain("@forward 'element-plus/theme-chalk/src/dark/var.scss' with")
+    expect(elementDarkThemeSource).toContain("@use 'element-plus/theme-chalk/src/dark/css-vars.scss';")
     expect(entrySource).toContain("import './styles/element/dark.scss'")
     expect(viteConfigSource).toContain("importStyle: 'sass'")
-    expect(viteConfigSource).toContain(
-      'additionalData: \'@use "@/styles/element/index.scss" as *;\'',
-    )
+    expect(viteConfigSource).toContain('additionalData: \'@use "@/styles/element/index.scss" as *;\'')
   })
 })

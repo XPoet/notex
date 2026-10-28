@@ -16,21 +16,13 @@ const sha = 'a'.repeat(40)
 const otherSha = 'b'.repeat(40)
 const snapshotSha = 'c'.repeat(40)
 const version = '0.0.10'
-const versionPaths = [
-  'package.json',
-  'src-tauri/tauri.conf.json',
-  'src-tauri/Cargo.toml',
-  'src-tauri/Cargo.lock',
-]
+const versionPaths = ['package.json', 'src-tauri/tauri.conf.json', 'src-tauri/Cargo.toml', 'src-tauri/Cargo.lock']
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'notex-github-release-'))
   mkdirSync(join(root, 'src-tauri'))
   writeFileSync(join(root, 'package.json'), `${JSON.stringify({ version }, null, 2)}\n`)
-  writeFileSync(
-    join(root, 'src-tauri/tauri.conf.json'),
-    `${JSON.stringify({ version }, null, 2)}\n`,
-  )
+  writeFileSync(join(root, 'src-tauri/tauri.conf.json'), `${JSON.stringify({ version }, null, 2)}\n`)
   writeFileSync(
     join(root, 'src-tauri/Cargo.toml'),
     `[package]\nname = "NoteX"\nversion = "${version}"\n\n[dependencies]\nother = "1"\n`,
@@ -53,9 +45,7 @@ function fixture() {
     state: 'uploaded',
     digest: `sha256:${'1'.repeat(64)}`,
   }))
-  const initialFiles = Object.fromEntries(
-    versionPaths.map((path) => [path, readFileSync(join(root, path), 'utf8')]),
-  )
+  const initialFiles = Object.fromEntries(versionPaths.map((path) => [path, readFileSync(join(root, path), 'utf8')]))
   initialFiles['src/feature.txt'] = 'original application code'
   const date = '2026-10-20T01:00:00Z'
   const commits = new Map([
@@ -94,8 +84,7 @@ function fixture() {
   function advanceMain(newVersion = version, changes = {}) {
     const parent = refs.get('heads/main')
     const files = { ...initialFiles, ...changes }
-    for (const path of versionPaths)
-      files[path] = files[path].replace(`"${version}"`, `"${newVersion}"`)
+    for (const path of versionPaths) files[path] = files[path].replace(`"${version}"`, `"${newVersion}"`)
     const commitSha = createHash('sha1').update(JSON.stringify({ parent, files })).digest('hex')
     const treeSha = `${commitSha}-tree`
     trees.set(treeSha, files)
@@ -161,10 +150,7 @@ function fixture() {
           return { data: { object: { type: 'commit', sha: value } } }
         }),
         updateRef: vi.fn().mockImplementation(async ({ ref, sha: value, force }) => {
-          if (
-            force ||
-            !commits.get(value)?.parents.some((parent) => parent.sha === refs.get(ref))
-          ) {
+          if (force || !commits.get(value)?.parents.some((parent) => parent.sha === refs.get(ref))) {
             throw Object.assign(new Error('Not a fast forward'), { status: 422 })
           }
           refs.set(ref, value)
@@ -330,9 +316,7 @@ describe('GitHub 自动发布', () => {
     expect(snapshot.files['src-tauri/Cargo.lock']).toContain('name = "NoteX"\nversion = "0.0.11"')
     expect(snapshot.files['src-tauri/Cargo.lock']).toContain('name = "other"\nversion = "1.0.0"')
     expect(snapshot.files['src/feature.txt']).toBe('original application code')
-    expect(
-      args.github.rest.git.createTree.mock.calls[0][0].tree.map((entry) => entry.path),
-    ).toEqual(versionPaths)
+    expect(args.github.rest.git.createTree.mock.calls[0][0].tree.map((entry) => entry.path)).toEqual(versionPaths)
     expect(args.refs.get('heads/main')).toBe(releasedSha)
     expect(args.refs.get('tags/v' + version)).toBe(snapshotSha)
     expect(args.core.setOutput).toHaveBeenCalledWith('commit_sha', releasedSha)
@@ -384,8 +368,7 @@ describe('GitHub 自动发布', () => {
       }),
     )
     expect(args.release.tag_name).toBe('v0.0.11')
-    for (const path of versionPaths)
-      writeFileSync(join(args.root, path), args.commits.get(commitSha).files[path])
+    for (const path of versionPaths) writeFileSync(join(args.root, path), args.commits.get(commitSha).files[path])
     for (const [index, asset] of args.assets.entries()) asset.name = expectedAssets('0.0.11')[index]
     await uploadInstallers({ ...args, commitSha, target: 'aarch64-apple-darwin' })
     await publishRelease({ ...args, commitSha })
@@ -415,9 +398,7 @@ describe('GitHub 自动发布', () => {
     args.releases.push(args.release)
     if (scenario === 'target') args.release.target_commitish = otherSha
     if (scenario === 'source') args.commits.get(snapshotSha).parents = [{ sha: otherSha }]
-    await expect(prepareRelease(args)).rejects.toThrow(
-      scenario === 'target' ? '目标提交被修改' : '版本快照不一致',
-    )
+    await expect(prepareRelease(args)).rejects.toThrow(scenario === 'target' ? '目标提交被修改' : '版本快照不一致')
     expect(args.github.rest.repos.updateRelease).not.toHaveBeenCalled()
     expect(args.github.rest.git.updateRef).not.toHaveBeenCalled()
   })
@@ -444,8 +425,7 @@ describe('GitHub 自动发布', () => {
     const first = args.refs.get('tags/v0.0.11')
     const secondMerge = args.advanceMain('0.0.11', { 'src/feature.txt': 'next feature' })
     args.context.payload.pull_request.merge_commit_sha = secondMerge
-    for (const path of versionPaths)
-      writeFileSync(join(args.root, path), args.commits.get(secondMerge).files[path])
+    for (const path of versionPaths) writeFileSync(join(args.root, path), args.commits.get(secondMerge).files[path])
     await prepareRelease(args)
     const second = args.commits.get(args.refs.get('tags/v0.0.12'))
     expect(second.parents).toEqual([{ sha: secondMerge }])
@@ -458,9 +438,7 @@ describe('GitHub 自动发布', () => {
 
   it('创建草稿后标签写入失败，重跑不再次递增版本', async () => {
     const args = fixture()
-    args.github.rest.git.createRef.mockRejectedValueOnce(
-      Object.assign(new Error('Temporary failure'), { status: 503 }),
-    )
+    args.github.rest.git.createRef.mockRejectedValueOnce(Object.assign(new Error('Temporary failure'), { status: 503 }))
     await expect(prepareRelease(args)).rejects.toThrow('Temporary failure')
     const reservedSha = args.release.target_commitish
     await prepareRelease(args)
@@ -472,9 +450,7 @@ describe('GitHub 自动发布', () => {
 
   it('版本标签写入后 main 更新失败，重跑继续同步相同版本', async () => {
     const args = fixture()
-    args.github.rest.git.updateRef.mockRejectedValueOnce(
-      Object.assign(new Error('Forbidden'), { status: 403 }),
-    )
+    args.github.rest.git.updateRef.mockRejectedValueOnce(Object.assign(new Error('Forbidden'), { status: 403 }))
     await expect(prepareRelease(args)).rejects.toThrow('写入 main 失败')
     const reservedSha = args.refs.get('tags/v0.0.11')
     await prepareRelease(args)
@@ -531,9 +507,7 @@ describe('GitHub 自动发布', () => {
     expect(main.parents).toEqual([{ sha: advanced }])
     expect(main.files['src/feature.txt']).toBe('new user code')
     expect(main.files['package.json']).toContain('"version": "0.0.13"')
-    expect(args.github.rest.git.updateRef).toHaveBeenCalledWith(
-      expect.objectContaining({ force: false }),
-    )
+    expect(args.github.rest.git.updateRef).toHaveBeenCalledWith(expect.objectContaining({ force: false }))
   })
 
   it('版本写入期间 main 再次前进时，重新读取并只提交版本文件', async () => {
@@ -547,9 +521,7 @@ describe('GitHub 自动发布', () => {
     expect(main.files['src/feature.txt']).toBe('concurrent user code')
     expect(main.files['package.json']).toContain('"version": "0.0.11"')
     expect(args.github.rest.git.updateRef).toHaveBeenCalledTimes(2)
-    expect(args.github.rest.git.updateRef.mock.calls.every(([call]) => call.force === false)).toBe(
-      true,
-    )
+    expect(args.github.rest.git.updateRef.mock.calls.every(([call]) => call.force === false)).toBe(true)
   })
 
   it('旧版本重跑不会降低 main 已有版本', async () => {
@@ -564,9 +536,7 @@ describe('GitHub 自动发布', () => {
 
   it('分支保护拒绝版本提交时停止，不强制覆盖分支', async () => {
     const args = fixture()
-    args.github.rest.git.updateRef.mockRejectedValue(
-      Object.assign(new Error('Protected branch'), { status: 422 }),
-    )
+    args.github.rest.git.updateRef.mockRejectedValue(Object.assign(new Error('Protected branch'), { status: 422 }))
     await expect(prepareRelease(args)).rejects.toThrow('main 拒绝自动版本提交')
     expect(args.github.rest.git.updateRef).toHaveBeenCalledOnce()
     expect(args.core.setOutput).not.toHaveBeenCalled()
@@ -631,18 +601,14 @@ describe('GitHub 自动发布', () => {
       writeFileSync(join(directory, file), 'installer fixture')
     }
     await uploadInstallers({ ...args, target })
-    const uploadedNames = args.github.rest.repos.uploadReleaseAsset.mock.calls.map(
-      ([asset]) => asset.name,
-    )
+    const uploadedNames = args.github.rest.repos.uploadReleaseAsset.mock.calls.map(([asset]) => asset.name)
     expect(uploadedNames).toEqual(indexes.map((index) => expectedAssets(version)[index]))
     expect(args.github.rest.repos.updateRelease).not.toHaveBeenCalled()
   })
 
   it('拒绝上传 macOS Intel 安装包', async () => {
     const args = fixture()
-    await expect(uploadInstallers({ ...args, target: 'x86_64-apple-darwin' })).rejects.toThrow(
-      '不支持的安装包构建目标',
-    )
+    await expect(uploadInstallers({ ...args, target: 'x86_64-apple-darwin' })).rejects.toThrow('不支持的安装包构建目标')
     expect(args.github.rest.repos.getRelease).not.toHaveBeenCalled()
     expect(args.github.rest.repos.uploadReleaseAsset).not.toHaveBeenCalled()
   })
@@ -670,40 +636,33 @@ describe('GitHub 自动发布', () => {
   it('不完整的已有附件阻止重试，不替换附件', async () => {
     const args = fixture()
     args.assets[0].state = 'starter'
-    await expect(uploadInstallers({ ...args, target: 'x86_64-pc-windows-msvc' })).rejects.toThrow(
-      '已存在但不完整',
-    )
+    await expect(uploadInstallers({ ...args, target: 'x86_64-pc-windows-msvc' })).rejects.toThrow('已存在但不完整')
     expect(args.github.rest.repos.uploadReleaseAsset).not.toHaveBeenCalled()
   })
 
   it('拒绝向已公开的 Release 上传', async () => {
     const args = fixture()
     args.release.draft = false
-    await expect(uploadInstallers({ ...args, target: 'aarch64-apple-darwin' })).rejects.toThrow(
-      '已公开发布',
-    )
+    await expect(uploadInstallers({ ...args, target: 'aarch64-apple-darwin' })).rejects.toThrow('已公开发布')
     expect(args.github.rest.repos.uploadReleaseAsset).not.toHaveBeenCalled()
   })
 
-  it.each(['missing', 'duplicate', 'empty', 'digest-mismatch'])(
-    '构建文件 %s 时停止上传流程',
-    async (scenario) => {
-      const args = fixture()
-      args.assets.length = 0
-      const target = 'aarch64-apple-darwin'
-      const directory = join(args.root, 'src-tauri/target', target, 'release/bundle/dmg')
-      mkdirSync(directory, { recursive: true })
-      if (scenario !== 'missing')
-        writeFileSync(join(directory, 'test.dmg'), scenario === 'empty' ? '' : 'installer fixture')
-      if (scenario === 'duplicate') writeFileSync(join(directory, 'test-2.dmg'), 'another fixture')
-      if (scenario === 'digest-mismatch')
-        args.github.rest.repos.uploadReleaseAsset.mockResolvedValue({
-          data: { state: 'uploaded', digest: `sha256:${'0'.repeat(64)}` },
-        })
-      await expect(uploadInstallers({ ...args, target })).rejects.toThrow()
-      expect(args.github.rest.repos.updateRelease).not.toHaveBeenCalled()
-    },
-  )
+  it.each(['missing', 'duplicate', 'empty', 'digest-mismatch'])('构建文件 %s 时停止上传流程', async (scenario) => {
+    const args = fixture()
+    args.assets.length = 0
+    const target = 'aarch64-apple-darwin'
+    const directory = join(args.root, 'src-tauri/target', target, 'release/bundle/dmg')
+    mkdirSync(directory, { recursive: true })
+    if (scenario !== 'missing')
+      writeFileSync(join(directory, 'test.dmg'), scenario === 'empty' ? '' : 'installer fixture')
+    if (scenario === 'duplicate') writeFileSync(join(directory, 'test-2.dmg'), 'another fixture')
+    if (scenario === 'digest-mismatch')
+      args.github.rest.repos.uploadReleaseAsset.mockResolvedValue({
+        data: { state: 'uploaded', digest: `sha256:${'0'.repeat(64)}` },
+      })
+    await expect(uploadInstallers({ ...args, target })).rejects.toThrow()
+    expect(args.github.rest.repos.updateRelease).not.toHaveBeenCalled()
+  })
 
   it.each(expectedAssets(version))('缺少 %s 时保持草稿，不上传校验文件或发布', async (name) => {
     const args = fixture()
@@ -716,18 +675,15 @@ describe('GitHub 自动发布', () => {
     expect(args.github.rest.repos.updateRelease).not.toHaveBeenCalled()
   })
 
-  it.each(['empty', 'unfinished', 'no-digest'])(
-    '任一安装包 %s 时保持草稿，不上传校验文件或发布',
-    async (scenario) => {
-      const args = fixture()
-      if (scenario === 'empty') args.assets[0].size = 0
-      if (scenario === 'unfinished') args.assets[0].state = 'starter'
-      if (scenario === 'no-digest') args.assets[0].digest = null
-      await expect(publishRelease(args)).rejects.toThrow('保持草稿状态')
-      expect(args.github.rest.repos.uploadReleaseAsset).not.toHaveBeenCalled()
-      expect(args.github.rest.repos.updateRelease).not.toHaveBeenCalled()
-    },
-  )
+  it.each(['empty', 'unfinished', 'no-digest'])('任一安装包 %s 时保持草稿，不上传校验文件或发布', async (scenario) => {
+    const args = fixture()
+    if (scenario === 'empty') args.assets[0].size = 0
+    if (scenario === 'unfinished') args.assets[0].state = 'starter'
+    if (scenario === 'no-digest') args.assets[0].digest = null
+    await expect(publishRelease(args)).rejects.toThrow('保持草稿状态')
+    expect(args.github.rest.repos.uploadReleaseAsset).not.toHaveBeenCalled()
+    expect(args.github.rest.repos.updateRelease).not.toHaveBeenCalled()
+  })
 
   it('三个安装包齐全后生成校验文件，再公开发布', async () => {
     const args = fixture()
@@ -737,9 +693,7 @@ describe('GitHub 自动发布', () => {
     const data = expectedAssets(version)
       .map((name) => `${'1'.repeat(64)}  ${name}\n`)
       .join('')
-    expect(upload).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'SHA256SUMS.txt', data: Buffer.from(data) }),
-    )
+    expect(upload).toHaveBeenCalledWith(expect.objectContaining({ name: 'SHA256SUMS.txt', data: Buffer.from(data) }))
     expect(publish).toHaveBeenCalledWith(
       expect.objectContaining({ draft: false, prerelease: false, make_latest: 'legacy' }),
     )
@@ -757,9 +711,7 @@ describe('GitHub 自动发布', () => {
         expect.objectContaining({ method: 'HEAD', redirect: 'follow' }),
       )
     }
-    expect(publish.mock.invocationCallOrder[0]).toBeLessThan(
-      args.fetchUrl.mock.invocationCallOrder[0],
-    )
+    expect(publish.mock.invocationCallOrder[0]).toBeLessThan(args.fetchUrl.mock.invocationCallOrder[0])
   })
 
   it('公开链接返回 404 时不报告发布成功，重跑只检查链接', async () => {

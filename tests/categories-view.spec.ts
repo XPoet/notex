@@ -133,10 +133,7 @@ describe('CategoriesView', () => {
     wrapper.findComponent({ name: 'ElTree' }).vm.$emit('node-drop', movedNode, targetNode, 'inner')
     await flushPromises()
 
-    expect(categoriesService.moveCategory).toHaveBeenCalledWith('source', 'target', [
-      'existing',
-      'source',
-    ])
+    expect(categoriesService.moveCategory).toHaveBeenCalledWith('source', 'target', ['existing', 'source'])
     expect(wrapper.findAll('.sidebar-category-name').map((item) => item.text())).toEqual([
       '未分类',
       'target',
@@ -148,9 +145,7 @@ describe('CategoriesView', () => {
   it('同级拖拽后按新顺序更新根分类和侧栏', async () => {
     const first = category('first')
     const second = category('second')
-    categoriesService.listCategories
-      .mockResolvedValueOnce([first, second])
-      .mockResolvedValueOnce([second, first])
+    categoriesService.listCategories.mockResolvedValueOnce([first, second]).mockResolvedValueOnce([second, first])
     const wrapper = await mountView()
     const rootNode: TestTreeNode = {
       data: category('root'),
@@ -175,14 +170,7 @@ describe('CategoriesView', () => {
     wrapper.findComponent({ name: 'ElTree' }).vm.$emit('node-drop', firstNode, secondNode, 'after')
     await flushPromises()
 
-    expect(categoriesService.moveCategory).toHaveBeenCalledWith('first', undefined, [
-      'second',
-      'first',
-    ])
-    expect(wrapper.findAll('.sidebar-category-name').map((item) => item.text())).toEqual([
-      '未分类',
-      'second',
-      'first',
-    ])
+    expect(categoriesService.moveCategory).toHaveBeenCalledWith('first', undefined, ['second', 'first'])
+    expect(wrapper.findAll('.sidebar-category-name').map((item) => item.text())).toEqual(['未分类', 'second', 'first'])
   })
 })

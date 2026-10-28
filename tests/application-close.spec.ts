@@ -72,9 +72,7 @@ describe('应用级静默关闭', () => {
   it('连续关闭请求只触发一次保存和备份', async () => {
     const { wrapper, flush, close } = await mountHost()
     let finishBackup: () => void = () => undefined
-    exitApplication.mockImplementationOnce(
-      () => new Promise<void>((resolve) => (finishBackup = resolve)),
-    )
+    exitApplication.mockImplementationOnce(() => new Promise<void>((resolve) => (finishBackup = resolve)))
 
     const closing = close()
     await flushPromises()
@@ -102,9 +100,7 @@ describe('应用级静默关闭', () => {
   it('卸载早于监听注册完成时也会注销监听', async () => {
     const stop = vi.fn()
     let finishRegistration: (value: () => void) => void = () => undefined
-    onExitRequested.mockImplementationOnce(
-      () => new Promise<() => void>((resolve) => (finishRegistration = resolve)),
-    )
+    onExitRequested.mockImplementationOnce(() => new Promise<() => void>((resolve) => (finishRegistration = resolve)))
     const { wrapper } = await mountHost()
     wrapper.unmount()
     finishRegistration(stop)

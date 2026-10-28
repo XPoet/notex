@@ -109,12 +109,8 @@ describe('AppSidebar', () => {
       }).href,
     )
     expect(wrapper.get('.sidebar-category-item').text()).toContain('未分类')
-    expect(wrapper.get('.sidebar-settings-item').attributes('href')).toBe(
-      router.resolve({ name: 'settings' }).href,
-    )
-    expect(wrapper.get('.app-sidebar').element.lastElementChild).toBe(
-      wrapper.get('.sidebar-settings-item').element,
-    )
+    expect(wrapper.get('.sidebar-settings-item').attributes('href')).toBe(router.resolve({ name: 'settings' }).href)
+    expect(wrapper.get('.app-sidebar').element.lastElementChild).toBe(wrapper.get('.sidebar-settings-item').element)
 
     const settingsNavigation = new Promise<void>((resolve) => {
       const removeAfterEach = router.afterEach((to) => {
@@ -228,8 +224,6 @@ describe('AppSidebar', () => {
       global: { plugins: [router], stubs: { ElButton: ButtonStub, ElIcon: IconStub } },
     })
 
-    expect(wrapper.get('.sidebar-category-item').classes()).toContain(
-      'sidebar-category-item--active',
-    )
+    expect(wrapper.get('.sidebar-category-item').classes()).toContain('sidebar-category-item--active')
   })
 })

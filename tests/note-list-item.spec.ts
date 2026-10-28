@@ -61,12 +61,7 @@ describe('NoteListItem', () => {
 
     expect(wrapper.get('.note-list-item-title').text()).toBe(note.title)
     expect(wrapper.get('.note-list-item-preview').text()).toBe(note.contentPreview)
-    expect(wrapper.findAll('mark').map((mark) => mark.text())).toEqual([
-      'img',
-      'script',
-      'script',
-      'a+b',
-    ])
+    expect(wrapper.findAll('mark').map((mark) => mark.text())).toEqual(['img', 'script', 'script', 'a+b'])
     expect(wrapper.find('img, script').exists()).toBe(false)
     wrapper.unmount()
   })

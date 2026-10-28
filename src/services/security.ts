@@ -1,10 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type {
-  AccessError,
-  AccessErrorCode,
-  AccessSnapshot,
-  ConfigurePasswordRequest,
-} from '@/types/security'
+import type { AccessError, AccessErrorCode, AccessSnapshot, ConfigurePasswordRequest } from '@/types/security'
 
 const errorCodes: AccessErrorCode[] = [
   'APP_LOCKED',
@@ -30,10 +25,7 @@ export function toAccessError(error: unknown): AccessError {
   return { code: 'PASSWORD_READ_FAILED', message: '无法读取开启密码配置，请重试。' }
 }
 
-async function call(
-  command: string,
-  arguments_: Record<string, unknown> = {},
-): Promise<AccessSnapshot> {
+async function call(command: string, arguments_: Record<string, unknown> = {}): Promise<AccessSnapshot> {
   try {
     return await invoke<AccessSnapshot>(command, arguments_)
   } catch (error: unknown) {
@@ -49,8 +41,6 @@ export function unlockApp(password: string): Promise<AccessSnapshot> {
   return call('unlock_app', { password })
 }
 
-export function configureStartupPassword(
-  request: ConfigurePasswordRequest,
-): Promise<AccessSnapshot> {
+export function configureStartupPassword(request: ConfigurePasswordRequest): Promise<AccessSnapshot> {
   return call('configure_startup_password', { request })
 }

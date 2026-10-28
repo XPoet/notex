@@ -34,15 +34,11 @@ async function call<T>(command: string, arguments_: Record<string, unknown> = {}
   }
 }
 export const listTags = (): Promise<TagSummary[]> => call('list_tags')
-export const listNoteTags = (noteId: string): Promise<TagSummary[]> =>
-  call('list_note_tags', { noteId })
+export const listNoteTags = (noteId: string): Promise<TagSummary[]> => call('list_note_tags', { noteId })
 export const createTag = (name: string): Promise<TagSummary> => call('create_tag', { name })
-export const renameTag = (id: string, name: string): Promise<RenameTagResult> =>
-  call('rename_tag', { id, name })
-export const mergeTag = (sourceId: string, targetId: string): Promise<void> =>
-  call('merge_tag', { sourceId, targetId })
+export const renameTag = (id: string, name: string): Promise<RenameTagResult> => call('rename_tag', { id, name })
+export const mergeTag = (sourceId: string, targetId: string): Promise<void> => call('merge_tag', { sourceId, targetId })
 export const deleteTag = (id: string): Promise<void> => call('delete_tag', { id })
 export const setNoteTags = (noteId: string, tagIds: string[]): Promise<void> =>
   call('set_note_tags', { noteId, tagIds })
-export const listNotesByTags = (tagIds: string[]): Promise<NoteSummary[]> =>
-  call('list_notes_by_tags', { tagIds })
+export const listNotesByTags = (tagIds: string[]): Promise<NoteSummary[]> => call('list_notes_by_tags', { tagIds })

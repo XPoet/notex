@@ -6,11 +6,7 @@ interface ErrorPayload {
   message?: unknown
 }
 
-const errorCodes: SearchErrorCode[] = [
-  'SEARCH_VALIDATION_FAILED',
-  'SEARCH_QUERY_FAILED',
-  'SEARCH_INDEX_REBUILD_FAILED',
-]
+const errorCodes: SearchErrorCode[] = ['SEARCH_VALIDATION_FAILED', 'SEARCH_QUERY_FAILED', 'SEARCH_INDEX_REBUILD_FAILED']
 
 function isSearchErrorCode(value: unknown): value is SearchErrorCode {
   return typeof value === 'string' && errorCodes.includes(value as SearchErrorCode)

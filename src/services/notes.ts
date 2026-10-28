@@ -1,11 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type {
-  NoteDetail,
-  NoteError,
-  NoteErrorCode,
-  NoteSaveRequest,
-  NoteSummary,
-} from '@/types/notes'
+import type { NoteDetail, NoteError, NoteErrorCode, NoteSaveRequest, NoteSummary } from '@/types/notes'
 
 interface TauriErrorPayload {
   code?: unknown
@@ -29,11 +23,7 @@ function isNoteErrorCode(value: unknown): value is NoteErrorCode {
 }
 
 export function toNoteError(error: unknown): NoteError {
-  if (
-    isTauriErrorPayload(error) &&
-    isNoteErrorCode(error.code) &&
-    typeof error.message === 'string'
-  ) {
+  if (isTauriErrorPayload(error) && isNoteErrorCode(error.code) && typeof error.message === 'string') {
     return { code: error.code, message: error.message }
   }
   return {

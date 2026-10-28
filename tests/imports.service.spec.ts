@@ -14,9 +14,7 @@ describe('笔记导入 Service', () => {
     const bytes = new Uint8Array([0xef, 0xbb, 0xbf, 35, 32, 0xe4, 0xb8, 0xad, 10])
     const note = { id: 'note', title: '记录' }
     vi.mocked(invoke).mockResolvedValue(note)
-    await expect(
-      importNote(new File([bytes], '记录.MD', { type: 'application/octet-stream' })),
-    ).resolves.toEqual(note)
+    await expect(importNote(new File([bytes], '记录.MD', { type: 'application/octet-stream' }))).resolves.toEqual(note)
     expect(invoke).toHaveBeenCalledWith('import_note', {
       fileName: '记录.MD',
       bytes: Array.from(bytes),

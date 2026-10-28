@@ -3,12 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke }))
 
-import {
-  configureStartupPassword,
-  getAccessStatus,
-  toAccessError,
-  unlockApp,
-} from '@/services/security'
+import { configureStartupPassword, getAccessStatus, toAccessError, unlockApp } from '@/services/security'
 
 describe('开启密码 Service', () => {
   beforeEach(() => {
@@ -31,9 +26,7 @@ describe('开启密码 Service', () => {
     const error = { code: 'PASSWORD_INCORRECT', message: '密码不正确，请重新输入。' }
     invoke.mockRejectedValue(error)
     await expect(unlockApp('错误密码')).rejects.toEqual(error)
-    expect(
-      toAccessError({ code: 'PASSWORD_TOO_MANY_ATTEMPTS', message: '请等待 30 秒。' }),
-    ).toEqual({
+    expect(toAccessError({ code: 'PASSWORD_TOO_MANY_ATTEMPTS', message: '请等待 30 秒。' })).toEqual({
       code: 'PASSWORD_TOO_MANY_ATTEMPTS',
       message: '请等待 30 秒。',
     })

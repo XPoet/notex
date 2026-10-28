@@ -147,16 +147,7 @@ async function versionCommit(github, repo, parent, contents, version, sourceSha)
   return commit.sha
 }
 
-async function syncMainVersion({
-  github,
-  repo,
-  core,
-  state,
-  version,
-  sourceSha,
-  snapshotSha,
-  contents,
-}) {
+async function syncMainVersion({ github, repo, core, state, version, sourceSha, snapshotSha, contents }) {
   for (let attempt = 0; attempt < 3; attempt++) {
     if (compareVersions(state.version, version) >= 0) return
     const sha =
@@ -169,10 +160,7 @@ async function syncMainVersion({
       return
     } catch (error) {
       if (![409, 422].includes(error.status) || attempt === 2) {
-        throw new Error(
-          '自动版本提交写入 main 失败，请检查 Actions 写入权限和 main 分支保护规则。',
-          { cause: error },
-        )
+        throw new Error('自动版本提交写入 main 失败，请检查 Actions 写入权限和 main 分支保护规则。', { cause: error })
       }
       const current = await mainState(github, repo, sourceSha, contents)
       if (current.sha === state.sha) {
@@ -221,11 +209,7 @@ function publishedReleaseBody(release, version, context) {
   const start = release.body.indexOf(downloadsStart)
   const end = release.body.indexOf(downloadsEnd, start)
   if (start < 0 || end < start) throw new Error('草稿缺少下载状态标记，停止发布。')
-  return (
-    release.body.slice(0, start) +
-    downloadsTable(version, context) +
-    release.body.slice(end + downloadsEnd.length)
-  )
+  return release.body.slice(0, start) + downloadsTable(version, context) + release.body.slice(end + downloadsEnd.length)
 }
 
 async function verifyDownloads(version, context, fetchUrl, core, wait) {
@@ -257,13 +241,9 @@ export async function prepareRelease({ github, context, core, root }) {
   if (!release) {
     const recorded = releases
       .filter(
-        (item) =>
-          reservedReleaseVersion(item) &&
-          /<!-- notex-release-source: [a-f0-9]{40} -->/.test(item.body ?? ''),
+        (item) => reservedReleaseVersion(item) && /<!-- notex-release-source: [a-f0-9]{40} -->/.test(item.body ?? ''),
       )
-      .sort((left, right) =>
-        compareVersions(reservedReleaseVersion(right), reservedReleaseVersion(left)),
-      )[0]
+      .sort((left, right) => compareVersions(reservedReleaseVersion(right), reservedReleaseVersion(left)))[0]
     if (recorded) {
       const head = recorded.body.match(/<!-- notex-release-source: ([a-f0-9]{40}) -->/)[1]
       const { data: comparison } = await github.rest.repos.compareCommits({
@@ -276,12 +256,10 @@ export async function prepareRelease({ github, context, core, root }) {
         core.setOutput('should_build', 'false')
         return
       }
-      if (comparison.status !== 'behind')
-        throw new Error('本次合并与已有发布历史分叉，停止自动分配版本。')
+      if (comparison.status !== 'behind') throw new Error('本次合并与已有发布历史分叉，停止自动分配版本。')
     }
   }
-  const state =
-    release && !release.draft ? null : await mainState(github, repo, sourceSha, contents)
+  const state = release && !release.draft ? null : await mainState(github, repo, sourceSha, contents)
   let version = release ? reservedReleaseVersion(release) : null
   let sha
   if (release && !version) throw new Error('已有 Release 使用了无效的正式版本标签。')
@@ -293,9 +271,7 @@ export async function prepareRelease({ github, context, core, root }) {
       ...releases.map(reservedReleaseVersion),
       ...refs.map((item) => tagVersion(item.ref.replace('refs/tags/', ''))),
     ].filter((item) => item !== null)
-    const baseline = versions.reduce((highest, item) =>
-      compareVersions(item, highest) > 0 ? item : highest,
-    )
+    const baseline = versions.reduce((highest, item) => (compareVersions(item, highest) > 0 ? item : highest))
     version = nextVersion(baseline, 'patch')
     sha = await versionCommit(github, repo, sourceSha, contents, version, sourceSha)
     release = (
@@ -365,15 +341,7 @@ export async function prepareRelease({ github, context, core, root }) {
   core.setOutput('should_build', String(release.draft))
 }
 
-export async function uploadInstallers({
-  github,
-  context,
-  core,
-  releaseId,
-  commitSha,
-  target,
-  root,
-}) {
+export async function uploadInstallers({ github, context, core, releaseId, commitSha, target, root }) {
   const sourceSha = releaseCommit(context)
   if (!/^[a-f0-9]{40}$/.test(commitSha ?? '')) throw new Error('缺少有效的发布提交。')
   const version = readReleaseVersion(root)
@@ -405,23 +373,13 @@ export async function uploadInstallers({
   for (const [bundle, extension, name] of installers) {
     const existing = assets.find((item) => item.name === name)
     if (existing) {
-      if (
-        existing.state !== 'uploaded' ||
-        existing.size <= 0 ||
-        !/^sha256:[a-f0-9]{64}$/.test(existing.digest ?? '')
-      ) {
+      if (existing.state !== 'uploaded' || existing.size <= 0 || !/^sha256:[a-f0-9]{64}$/.test(existing.digest ?? '')) {
         throw new Error(`${name} 已存在但不完整，请修复后合并新的 PR 自动发布新版本。`)
       }
       core.info(`复用已上传的 ${name}。`)
       continue
     }
-    const directory = resolve(
-      root ?? process.cwd(),
-      'src-tauri/target',
-      target,
-      'release/bundle',
-      bundle,
-    )
+    const directory = resolve(root ?? process.cwd(), 'src-tauri/target', target, 'release/bundle', bundle)
     const files = readdirSync(directory, { withFileTypes: true }).filter(
       (entry) => entry.isFile() && entry.name.endsWith(extension),
     )
@@ -476,12 +434,7 @@ export async function publishRelease({
   })
   const checksums = expectedAssets(version).map((name) => {
     const asset = assets.find((item) => item.name === name)
-    if (
-      !asset ||
-      asset.state !== 'uploaded' ||
-      asset.size <= 0 ||
-      !/^sha256:[a-f0-9]{64}$/.test(asset.digest ?? '')
-    ) {
+    if (!asset || asset.state !== 'uploaded' || asset.size <= 0 || !/^sha256:[a-f0-9]{64}$/.test(asset.digest ?? '')) {
       throw new Error(`安装包 ${name} 缺失、未上传完成或缺少 SHA-256 校验值，保持草稿状态。`)
     }
     return `${asset.digest.slice(7)}  ${name}\n`

@@ -83,24 +83,18 @@ describe('笔记图片预览', () => {
     await flushPromises()
     expect(paste.defaultPrevented).toBe(true)
     expect(saveImage).toHaveBeenCalledWith(bytes)
-    expect(wrapper.emitted('update')).toEqual([
-      [{ title: note.title, content: '![图片](./assets/pasted.png)' }],
-    ])
+    expect(wrapper.emitted('update')).toEqual([[{ title: note.title, content: '![图片](./assets/pasted.png)' }]])
     expect(wrapper.find('.cm-content .cm-image-preview img').exists()).toBe(true)
     await wrapper.setProps({ note: { ...note, content: '![图片](./assets/pasted.png)' } })
     await flushPromises()
-    expect(wrapper.find('.cm-image-preview button img').attributes('src')).toBe(
-      'blob:assets/pasted.png',
-    )
+    expect(wrapper.find('.cm-image-preview button img').attributes('src')).toBe('blob:assets/pasted.png')
     await wrapper.find('.cm-image-preview button').trigger('click')
     expect(wrapper.findComponent(viewerStub).props('urlList')).toEqual(['blob:assets/pasted.png'])
     wrapper.unmount()
   })
 
   it('读取已有图片，去重并按点击位置打开大图，关闭后回到编辑区', async () => {
-    const wrapper = mountEditor(
-      '![图片](./assets/a.png)\n![图片](./assets/b.gif)\n![重复](./assets/a.png)',
-    )
+    const wrapper = mountEditor('![图片](./assets/a.png)\n![图片](./assets/b.gif)\n![重复](./assets/a.png)')
     await flushPromises()
 
     expect(loadNoteImage).toHaveBeenCalledTimes(2)
@@ -205,9 +199,7 @@ describe('笔记图片预览', () => {
     await wrapper.find('.cm-content').trigger('keydown', { key: 'z', ctrlKey: true })
     await flushPromises()
     expect(wrapper.find('.cm-image-preview').exists()).toBe(false)
-    await wrapper
-      .find('.cm-content')
-      .trigger('keydown', { key: 'z', ctrlKey: true, shiftKey: true })
+    await wrapper.find('.cm-content').trigger('keydown', { key: 'z', ctrlKey: true, shiftKey: true })
     await flushPromises()
     expect(wrapper.find('.cm-image-preview img').exists()).toBe(true)
     wrapper.unmount()

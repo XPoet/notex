@@ -26,11 +26,7 @@ function isAssetErrorCode(value: unknown): value is AssetErrorCode {
 }
 
 export function toAssetError(error: unknown): AssetError {
-  if (
-    isTauriErrorPayload(error) &&
-    isAssetErrorCode(error.code) &&
-    typeof error.message === 'string'
-  ) {
+  if (isTauriErrorPayload(error) && isAssetErrorCode(error.code) && typeof error.message === 'string') {
     return { code: error.code, message: error.message }
   }
   return {
@@ -64,8 +60,7 @@ export async function loadNoteImage(noteId: string, relativePath: string): Promi
     // macOS 的 postMessage IPC 返回数字数组，其他 IPC 通道可返回 ArrayBuffer。
     const bytes = Array.isArray(response) ? new Uint8Array(response) : response
     const extension = relativePath.split('.').pop()?.toLowerCase()
-    const mimeType =
-      extension === 'jpg' || extension === 'jpeg' ? 'image/jpeg' : `image/${extension}`
+    const mimeType = extension === 'jpg' || extension === 'jpeg' ? 'image/jpeg' : `image/${extension}`
     return URL.createObjectURL(new Blob([bytes], { type: mimeType }))
   } catch (error: unknown) {
     throw toAssetError(error)
