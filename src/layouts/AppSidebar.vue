@@ -29,6 +29,9 @@ const emit = defineEmits<{
 }>()
 
 const dropTargetId = shallowRef<string>()
+const isMac = navigator.userAgent.includes('Mac')
+const createShortcutLabel = isMac ? '⌘ N' : 'Ctrl + N'
+const createShortcutKeys = isMac ? 'Meta+N' : 'Control+N'
 watch(
   () => props.noteDropEnabled,
   (enabled) => {
@@ -109,8 +112,17 @@ function flattenCategories(categories: CategoryNode[]): CategoryNode[] {
           <strong class="sidebar-brand-name">NoteX</strong>
         </span>
       </RouterLink>
-      <el-button class="sidebar-create-button" :icon="Plus" type="primary" @click="emit('create')">
-        新建笔记
+      <el-button
+        class="sidebar-create-button"
+        :icon="Plus"
+        type="primary"
+        aria-label="新建笔记"
+        :aria-keyshortcuts="createShortcutKeys"
+        :title="`新建笔记（${createShortcutLabel}）`"
+        @click="emit('create')"
+      >
+        <span>新建笔记</span>
+        <kbd class="sidebar-create-shortcut">{{ createShortcutLabel }}</kbd>
       </el-button>
     </div>
 
@@ -281,6 +293,14 @@ function flattenCategories(categories: CategoryNode[]): CategoryNode[] {
   block-size: 36px;
   font-size: 0.8125rem;
   font-weight: 600;
+}
+
+.sidebar-create-shortcut {
+  margin-inline-start: 12px;
+  font-family: inherit;
+  font-size: 0.6875rem;
+  font-weight: 400;
+  opacity: 0.8;
 }
 
 .sidebar-nav {

@@ -158,4 +158,27 @@ describe('工作台分类新建笔记', () => {
     expect(store.selectedNote?.id).toBe('new-note')
     wrapper.unmount()
   })
+
+  it.each([
+    ['Command + N', { metaKey: true }],
+    ['Ctrl + N', { ctrlKey: true }],
+  ])('%s 保存当前草稿并在当前分类新建一条笔记', async (_shortcut, modifiers) => {
+    const { wrapper, store } = await mountWorkbench({ category: 'work' })
+    store.updateDraft({ title: '快捷键前的标题', content: '快捷键前的正文' })
+    const event = new KeyboardEvent('keydown', { key: 'n', ...modifiers, cancelable: true })
+
+    window.dispatchEvent(event)
+    await flushPromises()
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(invoke).toHaveBeenCalledWith('save_note', {
+      id: 'existing',
+      title: '快捷键前的标题',
+      content: '快捷键前的正文',
+    })
+    expect(invoke).toHaveBeenCalledWith('create_note', { categoryId: 'work' })
+    expect(invoke.mock.calls.filter(([command]) => command === 'create_note')).toHaveLength(1)
+    expect(store.selectedNote?.id).toBe('new-note')
+    wrapper.unmount()
+  })
 })
