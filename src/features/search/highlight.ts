@@ -4,8 +4,5 @@ export function createSearchPattern(query: string): RegExp | undefined {
   )
   if (terms.length === 0) return undefined
 
-  return new RegExp(
-    terms.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'),
-    'giu',
-  )
+  return new RegExp(terms.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'giu')
 }

@@ -37,8 +37,7 @@ async function mountWorkbench(query: Record<string, string> = {}) {
         ElInput: {
           props: ['modelValue'],
           emits: ['update:modelValue'],
-          template:
-            '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+          template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
         },
         ElIcon: { template: '<i><slot /></i>' },
         ElScrollbar: { template: '<div><slot /></div>' },
@@ -78,18 +77,12 @@ describe('工作台搜索与标签同步', () => {
     const editor = wrapper.getComponent(NoteEditor)
 
     await input.setValue('笔记')
-    expect(wrapper.findAll('.note-list-item-title mark').map((mark) => mark.text())).toEqual([
-      '笔记',
-      '笔记',
-    ])
+    expect(wrapper.findAll('.note-list-item-title mark').map((mark) => mark.text())).toEqual(['笔记', '笔记'])
     expect(wrapper.find('.note-list-item-preview mark').exists()).toBe(false)
 
     await input.setValue('github')
     expect(editor.props('searchQuery')).toBe('github')
-    expect(wrapper.findAll('.note-list-item-preview mark').map((mark) => mark.text())).toEqual([
-      'GitHub',
-      'GitHub',
-    ])
+    expect(wrapper.findAll('.note-list-item-preview mark').map((mark) => mark.text())).toEqual(['GitHub', 'GitHub'])
     expect(wrapper.find('.note-list-item-title mark').exists()).toBe(false)
     await wrapper.findAll('.note-list-item')[1]?.trigger('click')
     await flushPromises()
@@ -117,10 +110,7 @@ describe('工作台搜索与标签同步', () => {
     ])
     await wrapper.get('.note-list-search').setValue('正文')
     expect(editor.props('searchQuery')).toBe('正文')
-    expect(wrapper.findAll('.note-list-item-preview mark').map((mark) => mark.text())).toEqual([
-      '正文',
-      '正文',
-    ])
+    expect(wrapper.findAll('.note-list-item-preview mark').map((mark) => mark.text())).toEqual(['正文', '正文'])
     await wrapper.get('.note-list-search').setValue('')
     expect(editor.props('searchQuery')).toBe('')
     expect(wrapper.find('.note-list-item mark').exists()).toBe(false)

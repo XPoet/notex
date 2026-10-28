@@ -7,12 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 const script = fileURLToPath(new URL('../scripts/release.mjs', import.meta.url))
-const versionFiles = [
-  'package.json',
-  'src-tauri/tauri.conf.json',
-  'src-tauri/Cargo.toml',
-  'src-tauri/Cargo.lock',
-]
+const versionFiles = ['package.json', 'src-tauri/tauri.conf.json', 'src-tauri/Cargo.toml', 'src-tauri/Cargo.lock']
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'notex-release-'))
@@ -81,9 +76,7 @@ describe('版本发布命令', () => {
     for (const path of versionFiles) {
       expect(readFileSync(join(root, path), 'utf8')).toContain(`"${version}"`)
     }
-    expect(readFileSync(join(root, 'src-tauri/Cargo.lock'), 'utf8')).toContain(
-      'name = "tauri"\nversion = "2.11.5"',
-    )
+    expect(readFileSync(join(root, 'src-tauri/Cargo.lock'), 'utf8')).toContain('name = "tauri"\nversion = "2.11.5"')
     expect(readFileSync(join(root, 'build-invocation.txt'), 'utf8')).toBe('tauri:build:dmg\n')
     expect(git('status', '--porcelain')).toBe('')
     expect(git('tag', '--list')).toBe('')
@@ -99,15 +92,12 @@ describe('版本发布命令', () => {
     expect(git('rev-parse', 'HEAD')).toBe(before)
   })
 
-  it.each(['0.0.7', '0.0.6', '01.0.0', '1.0.0-beta.1', '--skip-check', 'invalid'])(
-    '拒绝无效版本或参数 %s',
-    (arg) => {
-      const { git, run } = fixture()
-      expect(run([arg]).status).toBe(1)
-      expect(git('status', '--porcelain', '--ignored')).toBe('')
-      expect(git('rev-list', '--count', 'HEAD')).toBe('1')
-    },
-  )
+  it.each(['0.0.7', '0.0.6', '01.0.0', '1.0.0-beta.1', '--skip-check', 'invalid'])('拒绝无效版本或参数 %s', (arg) => {
+    const { git, run } = fixture()
+    expect(run([arg]).status).toBe(1)
+    expect(git('status', '--porcelain', '--ignored')).toBe('')
+    expect(git('rev-list', '--count', 'HEAD')).toBe('1')
+  })
 
   it.each(['untracked', 'modified', 'staged'])('拒绝 %s 工作区并保留用户改动', (state) => {
     const { root, git, run } = fixture()

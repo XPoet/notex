@@ -24,11 +24,7 @@ export const useCategoriesStore = defineStore('categories', () => {
     }
   }
 
-  async function move(
-    id: string,
-    parentId: string | undefined,
-    orderedIds: string[],
-  ): Promise<void> {
+  async function move(id: string, parentId: string | undefined, orderedIds: string[]): Promise<void> {
     isLoading.value = true
     error.value = undefined
     try {

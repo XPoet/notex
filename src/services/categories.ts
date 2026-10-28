@@ -44,13 +44,9 @@ async function call<T>(command: string, arguments_: Record<string, unknown> = {}
 export const listCategories = (): Promise<CategoryNode[]> => call('list_categories')
 export const createCategory = (name: string, parentId?: string): Promise<CategoryNode> =>
   call('create_category', { name, parentId })
-export const renameCategory = (id: string, name: string): Promise<CategoryNode> =>
-  call('rename_category', { id, name })
-export const moveCategory = (
-  id: string,
-  parentId: string | undefined,
-  orderedIds: string[],
-): Promise<void> => call('move_category', { id, parentId, orderedIds })
+export const renameCategory = (id: string, name: string): Promise<CategoryNode> => call('rename_category', { id, name })
+export const moveCategory = (id: string, parentId: string | undefined, orderedIds: string[]): Promise<void> =>
+  call('move_category', { id, parentId, orderedIds })
 export const getCategoryDeleteImpact = (id: string): Promise<CategoryDeleteImpact> =>
   call('get_category_delete_impact', { id })
 export const deleteCategory = (id: string, mode: CategoryDeleteMode): Promise<void> =>

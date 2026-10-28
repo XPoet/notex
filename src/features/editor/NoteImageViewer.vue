@@ -9,9 +9,7 @@ const props = defineProps<{
   previewPath?: string
 }>()
 const emit = defineEmits<{ close: [] }>()
-const availableImages = computed(() =>
-  props.images.filter((image) => image.url !== undefined && !image.failed),
-)
+const availableImages = computed(() => props.images.filter((image) => image.url !== undefined && !image.failed))
 const previewUrls = computed(() =>
   availableImages.value.flatMap((image) => (image.url === undefined ? [] : [image.url])),
 )

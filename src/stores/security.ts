@@ -1,11 +1,6 @@
 import { defineStore } from 'pinia'
 import { shallowRef } from 'vue'
-import {
-  configureStartupPassword,
-  getAccessStatus,
-  toAccessError,
-  unlockApp,
-} from '@/services/security'
+import { configureStartupPassword, getAccessStatus, toAccessError, unlockApp } from '@/services/security'
 import type { AccessError, AccessSnapshot, ConfigurePasswordRequest } from '@/types/security'
 
 export const useSecurityStore = defineStore('security', () => {

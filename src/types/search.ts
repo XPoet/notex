@@ -19,10 +19,7 @@ export interface SearchRequest {
   limit?: number
 }
 
-export type SearchErrorCode =
-  | 'SEARCH_VALIDATION_FAILED'
-  | 'SEARCH_QUERY_FAILED'
-  | 'SEARCH_INDEX_REBUILD_FAILED'
+export type SearchErrorCode = 'SEARCH_VALIDATION_FAILED' | 'SEARCH_QUERY_FAILED' | 'SEARCH_INDEX_REBUILD_FAILED'
 
 export interface SearchError {
   code: SearchErrorCode

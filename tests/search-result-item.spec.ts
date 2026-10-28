@@ -57,11 +57,7 @@ describe('SearchResultItem', () => {
     expect(title.findAll('mark').map((mark) => mark.text())).toEqual(['GitHub', '学习'])
     expect(preview.findAll('mark').map((mark) => mark.text())).toEqual(['github', '学习', 'a+b'])
     expect(category.findAll('mark').map((mark) => mark.text())).toEqual(['学习', 'GitHub'])
-    expect(wrapper.findAll('.result-tag mark').map((mark) => mark.text())).toEqual([
-      'github',
-      '学习',
-      'a+b',
-    ])
+    expect(wrapper.findAll('.result-tag mark').map((mark) => mark.text())).toEqual(['github', '学习', 'a+b'])
     expect(title.text()).toBe(result.title)
     expect(preview.text()).toBe(result.contentPreview)
     expect(category.text()).toBe(result.categoryPath)

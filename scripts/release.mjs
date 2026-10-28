@@ -4,12 +4,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-export const files = [
-  'package.json',
-  'src-tauri/tauri.conf.json',
-  'src-tauri/Cargo.toml',
-  'src-tauri/Cargo.lock',
-]
+export const files = ['package.json', 'src-tauri/tauri.conf.json', 'src-tauri/Cargo.toml', 'src-tauri/Cargo.lock']
 const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
 
 function log(message) {

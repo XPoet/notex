@@ -22,11 +22,7 @@ describe('笔记导入 Store', () => {
 
   it('串行导入，单篇失败后继续，并且只重试失败项', async () => {
     const store = useImportsStore()
-    const files = [
-      new File(['a'], '同名.md'),
-      new File(['b'], '同名.TXT'),
-      new File(['c'], '记录.md'),
-    ]
+    const files = [new File(['a'], '同名.md'), new File(['b'], '同名.TXT'), new File(['c'], '记录.md')]
     store.addFiles(files)
     expect(store.items.map((item) => item.title)).toEqual(['同名', '同名', '记录'])
     service.importNote

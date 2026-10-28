@@ -14,11 +14,7 @@ export interface RenameTagResult {
   tag?: TagSummary
   mergePreview?: TagMergePreview
 }
-export type TagErrorCode =
-  | 'TAG_NOT_FOUND'
-  | 'TAG_VALIDATION_FAILED'
-  | 'TAG_DUPLICATE_NAME'
-  | 'TAG_OPERATION_FAILED'
+export type TagErrorCode = 'TAG_NOT_FOUND' | 'TAG_VALIDATION_FAILED' | 'TAG_DUPLICATE_NAME' | 'TAG_OPERATION_FAILED'
 export interface TagError {
   code: TagErrorCode
   message: string

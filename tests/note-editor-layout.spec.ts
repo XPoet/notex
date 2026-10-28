@@ -38,16 +38,11 @@ describe('笔记编辑器布局', () => {
 
     const classification = wrapper.get('.note-editor-classification')
     expect(classification.get('.note-editor-location').text()).toBe('未分类')
-    expect(classification.findAll('.note-editor-tag').map((tag) => tag.text())).toEqual([
-      '#学习资料',
-    ])
+    expect(classification.findAll('.note-editor-tag').map((tag) => tag.text())).toEqual(['#学习资料'])
     expect(wrapper.getComponent(MarkdownEditor).props('searchQuery')).toBe('正文')
 
     await wrapper.setProps({ selectedTagIds: ['learning', 'work'] })
-    expect(classification.findAll('.note-editor-tag').map((tag) => tag.text())).toEqual([
-      '#学习资料',
-      '#工作',
-    ])
+    expect(classification.findAll('.note-editor-tag').map((tag) => tag.text())).toEqual(['#学习资料', '#工作'])
     await wrapper.setProps({ selectedTagIds: ['work'] })
     expect(classification.get('.note-editor-tag').text()).toBe('#工作')
     await wrapper.setProps({ note: { ...note, id: 'note-2' }, selectedTagIds: [] })
@@ -115,12 +110,8 @@ describe('笔记编辑器布局', () => {
 
   it('限制标题输入框和内容网格的最小内联尺寸，避免超长标题撑出编辑器', () => {
     expect(noteEditorSource).toContain('grid-template-columns: minmax(0, 1fr)')
-    expect(noteEditorSource).toContain(
-      '.note-title-input {\n  inline-size: 100%;\n  min-inline-size: 0;',
-    )
-    expect(noteEditorSource).toContain(
-      '.note-title-input :deep(.el-input__inner) {\n  min-inline-size: 0;',
-    )
+    expect(noteEditorSource).toContain('.note-title-input {\n  inline-size: 100%;\n  min-inline-size: 0;')
+    expect(noteEditorSource).toContain('.note-title-input :deep(.el-input__inner) {\n  min-inline-size: 0;')
   })
 
   it('移除标题上方的独立工具栏，保留 34px 文档状态栏', () => {
@@ -132,9 +123,7 @@ describe('笔记编辑器布局', () => {
 
   it('将分类和标签收纳到删除按钮后的更多操作中', () => {
     expect(noteEditorSource).toContain(':icon="MoreFilled"')
-    expect(noteEditorSource).toContain(
-      '<el-popover placement="bottom-end" :width="360" trigger="click">',
-    )
+    expect(noteEditorSource).toContain('<el-popover placement="bottom-end" :width="360" trigger="click">')
     expect(noteEditorSource).toContain(':category-id="note.categoryId"')
   })
 

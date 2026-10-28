@@ -143,9 +143,7 @@ describe('工作台拖拽分类', () => {
         case 'save_note': {
           if (saveFailure !== undefined) throw saveFailure
           storedNotes = storedNotes.map((note) =>
-            note.id === args?.id
-              ? { ...note, title: String(args.title), content: String(args.content) }
-              : note,
+            note.id === args?.id ? { ...note, title: String(args.title), content: String(args.content) } : note,
           )
           return storedNotes.find((note) => note.id === args?.id)
         }
@@ -183,9 +181,7 @@ describe('工作台拖拽分类', () => {
     expect(dataTransfer.getData(NOTE_DRAG_TYPE)).toBe('first')
     expect(dataTransfer.effectAllowed).toBe('move')
     await target.trigger('dragover', { dataTransfer })
-    expect(
-      target.element.parentElement?.classList.contains('sidebar-category-item--drop-target'),
-    ).toBe(true)
+    expect(target.element.parentElement?.classList.contains('sidebar-category-item--drop-target')).toBe(true)
     await target.trigger('drop', { dataTransfer })
     await flushPromises()
 
@@ -292,9 +288,7 @@ describe('工作台拖拽分类', () => {
     expect(store.selectedNote?.categoryId).toBe('source')
     expect(store.notes).toHaveLength(2)
     expect(messages.success).not.toHaveBeenCalled()
-    expect(messages.error).toHaveBeenCalledWith(
-      operation === 'save' ? '草稿写入失败' : '分类写入失败',
-    )
+    expect(messages.error).toHaveBeenCalledWith(operation === 'save' ? '草稿写入失败' : '分类写入失败')
     if (operation === 'save') {
       expect(invoke.mock.calls.some(([command]) => command === 'set_note_category')).toBe(false)
     }

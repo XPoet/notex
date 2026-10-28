@@ -5,10 +5,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const workflow = readFileSync(
-  new URL('../.github/workflows/release.yml', import.meta.url),
-  'utf8',
-).replace(/\r\n/g, '\n')
+const workflow = readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8').replace(
+  /\r\n/g,
+  '\n',
+)
 const scripts = [...workflow.matchAll(/^ {10}script: \|\n((?: {12}.*\n)+)/gm)].map((match) =>
   match[1].replace(/^ {12}/gm, ''),
 )
@@ -20,9 +20,7 @@ describe('发布工作流的原生脚本入口', () => {
     expect(workflow).toContain("github.event.head_commit.author.name == 'github-actions[bot]'")
     expect(workflow).toContain("startsWith(github.event.head_commit.message, 'chore(release): v')")
     expect(workflow).toContain('ref: ${{ github.sha }}')
-    expect(workflow).toContain(
-      '          pnpm format:check\n          pnpm lint\n          pnpm test\n',
-    )
+    expect(workflow).toContain('          pnpm format:check\n          pnpm lint\n          pnpm test\n')
   })
 
   it('仅构建 Windows x64 和 macOS Apple Silicon 安装包', () => {

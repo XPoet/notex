@@ -35,12 +35,10 @@ describe('export store', () => {
 
   it('选择目录后接收 Channel 进度和安全结果，并在当前会话复用目标目录', async () => {
     exportService.chooseExportDirectory.mockResolvedValue('/private/export-target')
-    exportService.exportNotes.mockImplementation(
-      (_request: unknown, onProgress: (value: typeof progress) => void) => {
-        onProgress(progress)
-        return Promise.resolve(result)
-      },
-    )
+    exportService.exportNotes.mockImplementation((_request: unknown, onProgress: (value: typeof progress) => void) => {
+      onProgress(progress)
+      return Promise.resolve(result)
+    })
     const store = useExportStore()
 
     await store.chooseDirectory()

@@ -33,22 +33,13 @@ describe('SearchResultList', () => {
     await wrapper.get('.search-more button').trigger('click')
     expect(wrapper.emitted('loadMore')).toEqual([[]])
     await wrapper.setProps({ results: [first, second], hasNextPage: false })
-    expect(wrapper.findAll('mark').map((mark) => mark.text())).toEqual([
-      'GitHub',
-      'github',
-      'GitHub',
-      'GitHub',
-    ])
+    expect(wrapper.findAll('mark').map((mark) => mark.text())).toEqual(['GitHub', 'github', 'GitHub', 'GitHub'])
     await wrapper.get('.search-result-title mark').trigger('click')
     expect(wrapper.emitted('open')).toEqual([['first']])
 
     await wrapper.setProps({ query: '资料' })
-    expect(wrapper.findAll('.search-result-title mark').map((mark) => mark.text())).toEqual([
-      '资料',
-    ])
-    expect(wrapper.findAll('.search-result-preview mark').map((mark) => mark.text())).toEqual([
-      '资料',
-    ])
+    expect(wrapper.findAll('.search-result-title mark').map((mark) => mark.text())).toEqual(['资料'])
+    expect(wrapper.findAll('.search-result-preview mark').map((mark) => mark.text())).toEqual(['资料'])
     await wrapper.setProps({ query: '' })
     expect(wrapper.find('mark').exists()).toBe(false)
     expect(wrapper.find('.search-result-item').exists()).toBe(false)

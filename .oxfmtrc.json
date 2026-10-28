@@ -6,11 +6,5 @@
   "trailingComma": "all",
   "printWidth": 120,
   "endOfLine": "lf",
-  "ignorePatterns": [
-    "dist/**",
-    "coverage/**",
-    "src-tauri/target/**",
-    "components.d.ts",
-    "AGENTS.md"
-  ]
+  "ignorePatterns": ["dist/**", "coverage/**", "src-tauri/target/**", "components.d.ts", "AGENTS.md"]
 }
