@@ -1,13 +1,14 @@
 # NoteX IPC 契约
 
-> 契约版本：V008
-> 最后更新：2026-07-26
+> 契约版本：V009
+> 最后更新：2026-10-28
 
 ## 1. 通用规则
 
 - Vue 组件只能调用 TypeScript Service；Service 统一封装 Tauri `invoke`。
 - Command 仅负责参数反序列化、线程调度和 Service 调用；不得接收前端提供的数据库路径或任意文件路径。`export_notes.targetDirectory` 是唯一例外：前端 Service 只传递系统目录选择器的结果，Rust 仍不信任该值，必须将其规范化并验证为已存在的本地目录。
 - 失败以稳定错误码返回，前端仅展示安全诊断信息，不显示 SQL、系统绝对路径或笔记内容。
+- Rust 在应用 Command 的统一入口校验解锁状态。新进程默认锁定，仅放行 `get_access_status`、`unlock_app`、`show_main_window` 和 `exit_application`；其他接口（包括初始化、设置、图片、搜索、导入和导出）在解锁前统一返回 `APP_LOCKED`。
 
 ## 2. `bootstrap_app`
 
@@ -42,7 +43,7 @@
 
 无参数，成功返回空值。
 
-前端只可在本地数据和设置初始化完成、首帧 UI 已绘制后，通过 TypeScript Window Service 调用。Command 只操作固定标签为 `main` 的应用窗口，显示并聚焦该窗口；不接收窗口标签、路径或其他前端参数。原生窗口创建时使用与启动面板一致的暖色背景，避免页面资源尚未加载时暴露系统白底。失败复用 `BootstrapError` 的安全错误码和提示。
+前端在启动解锁页、诊断页或工作区的首帧 UI 已绘制后，通过 TypeScript Window Service 调用。Command 只操作固定标签为 `main` 的应用窗口，显示并聚焦该窗口；不接收窗口标签、路径或其他前端参数。原生窗口创建时使用与启动面板一致的暖色背景，避免页面资源尚未加载时暴露系统白底。失败复用 `BootstrapError` 的安全错误码和提示。
 
 ### 2.2 应用关闭与 `exit_application`
 
@@ -50,7 +51,7 @@
 
 前端串行保存当前草稿，保存期间若有新的编辑则继续保存最新版本；保存失败时阻止关闭并展示重试提示。保存成功后调用 `exit_application`，无参数，成功返回空值，窗口操作失败复用 `BootstrapError`。重复关闭请求不会启动多份备份。
 
-Command 委托 Shutdown Service 隐藏主窗口并等待后台阻塞任务：Backup Service 通过 Export Repository 在同一数据库事务中读取所有未删除笔记、分类层级和关联图片，生成应用数据目录内固定的 `backups/NoteX-latest.zip`。本功能不接受前端路径，也不受手动导出默认目录或当前筛选条件影响。
+Command 委托 Shutdown Service 隐藏主窗口；尚未解锁时直接退出，不读取笔记或创建备份。已解锁时等待后台阻塞任务：Backup Service 通过 Export Repository 在同一数据库事务中读取所有未删除笔记、分类层级和关联图片，生成应用数据目录内固定的 `backups/NoteX-latest.zip`。本功能不接受前端路径，也不受手动导出默认目录或当前筛选条件影响。
 
 ZIP 内按分类层级保存 Markdown，未分类笔记放入“未分类”目录；图片集中保存在 `assets` 并改写相对引用。分类和笔记重名时沿用手动导出的文件名清理、冲突编号规则。回收站、标签、应用设置和数据库文件不参与本次 Markdown 导出。
 
@@ -58,7 +59,19 @@ ZIP 内按分类层级保存 Markdown，未分类笔记放入“未分类”目�
 
 ## 3. 前端状态
 
-`app` Pinia Store 管理 `idle`、`loading`、`ready`、`failed` 四种启动状态。只有该 Store 的 `ready` 才渲染路由；设置 Store 的临时加载状态不得切换回启动遮罩。当前接口不提供修改或迁移数据目录的能力。
+`app` Pinia Store 管理 `idle`、`loading`、`locked`、`ready`、`failed` 五种启动状态。先读取开启密码状态：配置密码且尚未解锁时仅渲染解锁页，不初始化笔记工作区或读取完整设置；解锁后先完成 `bootstrap_app`，再加载设置，最后切换为 `ready`。无密码时沿相同顺序直接初始化。配置读取失败进入诊断页，不能回退到免密码启动。只有 `ready` 才渲染路由；设置 Store 的临时加载状态不得切换回启动遮罩。当前接口不提供修改或迁移数据目录的能力。
+
+### 3.1 开启密码接口
+
+- `get_access_status`：无参数，返回 `AccessSnapshot { passwordEnabled: boolean, locked: boolean }`。Rust 只读设置表中的密码哈希，不读取笔记、不运行 Migration、不创建数据库。首次启动数据库不存在时返回未配置密码并允许初始化；数据库或已保存哈希损坏时拒绝进入工作区。
+- `unlock_app`：请求 `{ password: string }`，在阻塞线程使用 Argon2id 校验密码，成功返回已解锁的 `AccessSnapshot`。密码原样校验，保留首尾空格和 Unicode；失败保持锁定。已保存的旧密码仍支持最多 128 个字符的验证，避免新密码长度限制导致无法解锁或修改密码。解锁状态仅保存在当前进程内存，新进程默认重新锁定。
+- `configure_startup_password`：请求 `{ request: { currentPassword?: string, newPassword: string | null } }`，仅允许已解锁会话调用。未设置密码时可直接设置；修改和关闭已配置密码都必须先验证当前密码。`newPassword: null` 表示关闭；字符串必须为 4～20 个 Unicode 字符且不能全部为空白。成功只返回 `AccessSnapshot`，设置立即持久化，下次启动按新配置校验。
+
+密码仅以随机盐的 Argon2id PHC 哈希保存在 `app_settings.startup_password_hash`，不返回前端、不写日志、不进入 Markdown 或关闭备份。密码计算在阻塞线程执行；统一入口只读取原子解锁标记，不等待密码计算。连续输错 5 次后，该进程的解锁及密码变更共用 30 秒冷却；读取状态不能重置失败计数。软件不提供忘记密码找回入口。
+
+安全边界：此功能控制应用启动访问，不加密 SQLite、图片、手动导出或备份；有权访问应用数据文件的人仍可直接读取或修改文件。
+
+错误码：`APP_LOCKED` ｜ `PASSWORD_INCORRECT` ｜ `PASSWORD_VALIDATION_FAILED` ｜ `PASSWORD_READ_FAILED` ｜ `PASSWORD_SAVE_FAILED` ｜ `PASSWORD_TOO_MANY_ATTEMPTS`。错误只包含稳定码和安全提示，不包含密码、哈希、SQL 或系统路径。
 
 ## 4. 笔记接口
 

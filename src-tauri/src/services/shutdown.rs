@@ -7,6 +7,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::domain::bootstrap::BootstrapCommandError;
 use crate::services::backup::BackupService;
+use crate::services::security::AccessState;
 
 const EXIT_REQUESTED_EVENT: &str = "notex-exit-requested";
 
@@ -39,6 +40,12 @@ impl ShutdownState {
                 self.0.store(0, Ordering::Release);
                 return Err(BootstrapCommandError::bootstrap_failed());
             }
+        }
+        // 尚未解锁时直接退出，避免在密码验证前读取笔记并生成明文备份。
+        if !app.state::<AccessState>().is_unlocked() {
+            self.0.store(2, Ordering::Release);
+            app.exit(0);
+            return Ok(());
         }
         // 压缩失败只保留旧备份，不弹窗、不阻止退出；后台任务完成前保持进程存活。
         let backup_result = tauri::async_runtime::spawn_blocking({

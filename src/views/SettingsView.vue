@@ -3,6 +3,7 @@ import { onMounted, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import SettingsPanel from '@/features/settings/SettingsPanel.vue'
+import StartupPasswordSettings from '@/features/settings/StartupPasswordSettings.vue'
 import { chooseDefaultExportDirectory, openDataDirectory } from '@/services/settings'
 import ManagementLayout from '@/layouts/ManagementLayout.vue'
 import { useCategoriesStore } from '@/stores/categories'
@@ -91,7 +92,11 @@ onMounted(() => {
       @update="updateSettings"
       @choose-default-export-directory="chooseDirectory"
       @open-data-directory="openDirectory"
-    />
+    >
+      <template #security>
+        <StartupPasswordSettings />
+      </template>
+    </SettingsPanel>
   </ManagementLayout>
 </template>
 

@@ -87,6 +87,8 @@ function isEditorFontSize(value: number): value is 14 | 15 | 16 | 17 | 18 {
       </label>
     </article>
 
+    <slot name="security" />
+
     <article class="settings-group">
       <header>
         <div>

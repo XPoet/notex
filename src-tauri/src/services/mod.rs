@@ -6,6 +6,7 @@ pub mod export;
 pub mod imports;
 pub mod notes;
 pub mod search;
+pub mod security;
 pub mod settings;
 pub mod shutdown;
 pub mod tags;
