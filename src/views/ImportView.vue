@@ -126,7 +126,9 @@ onMounted(() => {
         >
           {{ importsStore.items.length > 0 ? '继续选择文件' : '选择文件' }}
         </el-button>
-        <span class="import-picker-limit">仅支持 Markdown 和 TXT 文件，单个文件不超过 10 MB，每批最多 100 个文件</span>
+        <span class="import-picker-limit">
+          仅支持 Markdown 和 TXT 文件，单个文件不超过 10 MB，每批最多 100 个文件
+        </span>
       </section>
       <p v-if="importsStore.selectionError" class="import-error" role="alert">
         {{ importsStore.selectionError }}
