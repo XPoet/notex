@@ -11,15 +11,18 @@ use argon2::{
 use rusqlite::{Connection, OpenFlags};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use uuid::Uuid;
+use zeroize::Zeroizing;
 
-use crate::database::connection::open_database;
+use crate::database::connection::open_existing_database;
 use crate::domain::security::{AccessError, AccessSnapshot, ConfigurePasswordRequest};
 use crate::repositories::security::SecurityRepository;
+use crate::services::backup::BackupService;
 
 #[derive(Default)]
 struct AccessSession {
     failed_attempts: u8,
     retry_at: Option<Instant>,
+    backup_password: Option<Zeroizing<String>>,
 }
 
 #[derive(Default)]
@@ -36,6 +39,12 @@ impl AccessState {
         self.0.unlocked.load(Ordering::Acquire)
     }
 
+    pub fn clear_backup_password(&self) {
+        if let Ok(mut session) = self.0.session.lock() {
+            session.backup_password = None;
+        }
+    }
+
     pub fn authorize_command(&self, command: &str) -> Result<(), AccessError> {
         if matches!(
             command,
@@ -50,18 +59,20 @@ impl AccessState {
 }
 
 pub struct SecurityService {
+    data_directory: PathBuf,
     database_path: PathBuf,
 }
 
 impl SecurityService {
     pub fn new(data_directory: &Path) -> Self {
         Self {
+            data_directory: data_directory.to_path_buf(),
             database_path: data_directory.join("database").join("notex.db"),
         }
     }
 
     pub fn status(&self, state: &AccessState) -> Result<AccessSnapshot, AccessError> {
-        let _session = state
+        let mut session = state
             .0
             .session
             .lock()
@@ -70,6 +81,7 @@ impl SecurityService {
         if let Some(hash) = &hash {
             validate_hash(hash)?;
         } else {
+            session.backup_password = None;
             state.0.unlocked.store(true, Ordering::Release);
         }
         Ok(AccessSnapshot {
@@ -90,6 +102,19 @@ impl SecurityService {
             .map_err(|_| AccessError::ReadFailed)?;
         let hash = self.read_hash()?.ok_or(AccessError::ReadFailed)?;
         verify_password(&mut session, password, &hash)?;
+        let mut connection =
+            open_existing_database(&self.database_path).map_err(|_| AccessError::ReadFailed)?;
+        let transaction = connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(|_| AccessError::ReadFailed)?;
+        if SecurityRepository::password_hash(&transaction)?.as_deref() != Some(&hash) {
+            return Err(AccessError::IncorrectPassword);
+        }
+        BackupService::new(&self.data_directory)
+            .ensure_encrypted(password)
+            .map_err(|_| AccessError::BackupSyncFailed)?;
+        transaction.commit().map_err(|_| AccessError::ReadFailed)?;
+        session.backup_password = Some(Zeroizing::new(password.to_owned()));
         state.0.unlocked.store(true, Ordering::Release);
         Ok(AccessSnapshot {
             password_enabled: true,
@@ -110,12 +135,17 @@ impl SecurityService {
         if !state.is_unlocked() {
             return Err(AccessError::Locked);
         }
-        let current_hash = self.read_hash()?;
-        if let Some(hash) = current_hash {
+        let mut connection =
+            open_existing_database(&self.database_path).map_err(|_| AccessError::SaveFailed)?;
+        let transaction = connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(|_| AccessError::SaveFailed)?;
+        let current_hash = SecurityRepository::password_hash(&transaction)?;
+        if let Some(hash) = &current_hash {
             verify_password(
                 &mut session,
                 request.current_password.as_deref().unwrap_or(""),
-                &hash,
+                hash,
             )?;
         }
         let hash = request
@@ -123,16 +153,89 @@ impl SecurityService {
             .as_deref()
             .map(hash_password)
             .transpose()?;
-        let mut connection =
-            open_database(&self.database_path).map_err(|_| AccessError::SaveFailed)?;
+        let backup = BackupService::new(&self.data_directory);
+        let old_password = if current_hash.is_some() {
+            request.current_password.as_deref()
+        } else {
+            None
+        };
+        backup
+            .recover_pending_update(old_password)
+            .map_err(|_| AccessError::BackupSyncFailed)?;
         let now = OffsetDateTime::now_utc()
             .format(&Rfc3339)
             .map_err(|_| AccessError::SaveFailed)?;
-        SecurityRepository::save_password_hash(&mut connection, hash.as_deref(), &now)?;
+        SecurityRepository::stage_password_hash(&transaction, hash.as_deref(), &now)?;
+        let mut backup_update = backup
+            .prepare_password_change(old_password, request.new_password.as_deref())
+            .map_err(|_| AccessError::BackupSyncFailed)?;
+        if let Some(update) = &mut backup_update {
+            update.apply().map_err(|_| AccessError::BackupSyncFailed)?;
+        }
+        if transaction.commit().is_err() {
+            if let Some(update) = &mut backup_update {
+                update
+                    .rollback()
+                    .map_err(|_| AccessError::BackupSyncFailed)?;
+            }
+            return Err(AccessError::SaveFailed);
+        }
+        if let Some(update) = &mut backup_update {
+            if update.finish().is_err() {
+                let rollback = update.rollback();
+                let restore = SecurityRepository::save_password_hash(
+                    &mut connection,
+                    current_hash.as_deref(),
+                    &now,
+                );
+                rollback.map_err(|_| AccessError::BackupSyncFailed)?;
+                restore?;
+                return Err(AccessError::BackupSyncFailed);
+            }
+        }
+        session.backup_password = request
+            .new_password
+            .as_ref()
+            .map(|password| Zeroizing::new(password.clone()));
         Ok(AccessSnapshot {
             password_enabled: hash.is_some(),
             locked: false,
         })
+    }
+
+    pub fn create_exit_backup(&self, state: &AccessState) -> Result<(), AccessError> {
+        let session = state
+            .0
+            .session
+            .lock()
+            .map_err(|_| AccessError::ReadFailed)?;
+        if !state.is_unlocked() {
+            return Err(AccessError::Locked);
+        }
+        let mut connection =
+            open_existing_database(&self.database_path).map_err(|_| AccessError::ReadFailed)?;
+        let transaction = connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(|_| AccessError::ReadFailed)?;
+        let hash = SecurityRepository::password_hash(&transaction)?;
+        let password = match &hash {
+            Some(hash) => {
+                let password = session
+                    .backup_password
+                    .as_ref()
+                    .ok_or(AccessError::Locked)?;
+                let parsed = validate_hash(hash)?;
+                Argon2::default()
+                    .verify_password(password.as_bytes(), &parsed)
+                    .map_err(|_| AccessError::BackupSyncFailed)?;
+                Some(password.as_str())
+            }
+            None => None,
+        };
+        BackupService::new(&self.data_directory)
+            .create_latest(password)
+            .map_err(|_| AccessError::BackupSyncFailed)?;
+        transaction.commit().map_err(|_| AccessError::ReadFailed)
     }
 
     fn read_hash(&self) -> Result<Option<String>, AccessError> {
@@ -225,6 +328,7 @@ fn verify_password(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::database::connection::open_database;
     use crate::repositories::bootstrap::BootstrapRepository;
 
     fn fixture() -> Result<(SecurityService, PathBuf), Box<dyn std::error::Error>> {
@@ -459,6 +563,175 @@ mod tests {
         let restarted = AccessState::default();
         assert!(service.status(&restarted)?.locked);
         service.unlock(&restarted, "123456")?;
+        Ok(())
+    }
+
+    #[test]
+    fn automatically_synchronizes_existing_and_future_backups_with_password_changes()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use zip::ZipArchive;
+        let (service, directory) = fixture()?;
+        let state = AccessState::default();
+        service.status(&state)?;
+        service.create_exit_backup(&state)?;
+        let path = directory.join("backups/NoteX-latest.zip");
+        service.configure(&state, &request(None, Some("1234")))?;
+        let mut archive = ZipArchive::new(std::fs::File::open(&path)?)?;
+        assert!(archive.by_index(0).is_err());
+        assert!(archive.by_index_decrypt(0, b"1234").is_ok());
+        drop(archive);
+        let restarted = AccessState::default();
+        assert!(service.status(&restarted)?.locked);
+        assert!(service.create_exit_backup(&restarted).is_err());
+        service.unlock(&restarted, "1234")?;
+        service.create_exit_backup(&restarted)?;
+        service.configure(&restarted, &request(Some("1234"), Some("5678")))?;
+        service.create_exit_backup(&restarted)?;
+        let mut archive = ZipArchive::new(std::fs::File::open(&path)?)?;
+        assert!(
+            archive
+                .by_index_decrypt(0, b"1234")
+                .and_then(|mut entry| std::io::copy(&mut entry, &mut std::io::sink())
+                    .map_err(zip::result::ZipError::Io))
+                .is_err()
+        );
+        assert!(archive.by_index_decrypt(0, b"5678").is_ok());
+        drop(archive);
+        service.configure(&restarted, &request(Some("5678"), None))?;
+        assert!(
+            ZipArchive::new(std::fs::File::open(&path)?)?
+                .by_index(0)
+                .is_ok()
+        );
+        service.create_exit_backup(&restarted)?;
+        assert!(ZipArchive::new(std::fs::File::open(&path)?)?.is_empty());
+        assert!(
+            restarted
+                .0
+                .session
+                .lock()
+                .map_err(|_| "session lock failed")?
+                .backup_password
+                .is_none()
+        );
+        assert_eq!(std::fs::read_dir(directory.join("backups"))?.count(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn database_commit_failure_restores_both_password_and_backup()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let (service, directory) = fixture()?;
+        let state = AccessState::default();
+        service.status(&state)?;
+        service.create_exit_backup(&state)?;
+        let path = directory.join("backups/NoteX-latest.zip");
+        let previous = std::fs::read(&path)?;
+        let database = open_database(&service.database_path)?;
+        database.execute_batch(
+            "CREATE TABLE deferred_backup_failure (
+              note_id TEXT REFERENCES notes(id) DEFERRABLE INITIALLY DEFERRED
+            );
+            CREATE TRIGGER fail_password_commit AFTER INSERT ON app_settings
+            WHEN NEW.key = 'startup_password_hash'
+            BEGIN
+              INSERT INTO deferred_backup_failure (note_id) VALUES ('missing-note');
+            END;",
+        )?;
+        assert!(matches!(
+            service.configure(&state, &request(None, Some("1234"))),
+            Err(AccessError::SaveFailed)
+        ));
+        assert!(SecurityRepository::password_hash(&database)?.is_none());
+        assert_eq!(std::fs::read(path)?, previous);
+        assert!(
+            state
+                .0
+                .session
+                .lock()
+                .map_err(|_| "session lock failed")?
+                .backup_password
+                .is_none()
+        );
+        assert_eq!(std::fs::read_dir(directory.join("backups"))?.count(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn backup_failure_preserves_the_existing_password_and_archive()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let (service, directory) = fixture()?;
+        let state = AccessState::default();
+        service.status(&state)?;
+        service.configure(&state, &request(None, Some("1234")))?;
+        service.create_exit_backup(&state)?;
+        let database = open_database(&service.database_path)?;
+        let hash = SecurityRepository::password_hash(&database)?;
+        let path = directory.join("backups/NoteX-latest.zip");
+        let previous = std::fs::read(&path)?;
+        std::fs::create_dir(directory.join("backups/NoteX-latest.zip.part"))?;
+        assert!(matches!(
+            service.configure(&state, &request(Some("1234"), None)),
+            Err(AccessError::BackupSyncFailed)
+        ));
+        assert_eq!(SecurityRepository::password_hash(&database)?, hash);
+        assert_eq!(std::fs::read(path)?, previous);
+        assert_eq!(
+            state
+                .0
+                .session
+                .lock()
+                .map_err(|_| "session lock failed")?
+                .backup_password
+                .as_deref()
+                .map(String::as_str),
+            Some("1234")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn stale_or_missing_session_password_never_creates_an_unencrypted_backup()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let (service, directory) = fixture()?;
+        let state = AccessState::default();
+        service.status(&state)?;
+        service.configure(&state, &request(None, Some("1234")))?;
+        service.create_exit_backup(&state)?;
+        let path = directory.join("backups/NoteX-latest.zip");
+        let previous = std::fs::read(&path)?;
+        state.clear_backup_password();
+        assert!(matches!(
+            service.create_exit_backup(&state),
+            Err(AccessError::Locked)
+        ));
+        service.unlock(&state, "1234")?;
+        let mut database = open_database(&service.database_path)?;
+        SecurityRepository::save_password_hash(
+            &mut database,
+            Some(&hash_password("5678")?),
+            "now",
+        )?;
+        assert!(matches!(
+            service.create_exit_backup(&state),
+            Err(AccessError::BackupSyncFailed)
+        ));
+        assert_eq!(std::fs::read(path)?, previous);
+        Ok(())
+    }
+
+    #[test]
+    fn exit_before_database_initialization_does_not_create_an_empty_database()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory =
+            std::env::temp_dir().join(format!("notex-security-early-exit-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(directory.join("database"))?;
+        let service = SecurityService::new(&directory);
+        let state = AccessState::default();
+        assert!(!service.status(&state)?.locked);
+        assert!(service.create_exit_backup(&state).is_err());
+        assert!(!service.database_path.exists());
+        assert!(!directory.join("backups").exists());
         Ok(())
     }
 }

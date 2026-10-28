@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use zeroize::Zeroize;
 
 #[derive(Clone, Copy, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -15,6 +16,13 @@ pub struct ConfigurePasswordRequest {
     pub new_password: Option<String>,
 }
 
+impl Drop for ConfigurePasswordRequest {
+    fn drop(&mut self) {
+        self.current_password.zeroize();
+        self.new_password.zeroize();
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum AccessError {
     #[error("请先输入开启密码解锁 NoteX。")]
@@ -27,6 +35,8 @@ pub enum AccessError {
     ReadFailed,
     #[error("无法保存开启密码配置，请重试。")]
     SaveFailed,
+    #[error("无法同步自动备份的密码，请检查备份目录后重试。")]
+    BackupSyncFailed,
     #[error("密码连续输错 5 次，请等待 30 秒后重试。")]
     TooManyAttempts,
 }
@@ -46,6 +56,7 @@ impl From<AccessError> for AccessCommandError {
             AccessError::InvalidPassword => "PASSWORD_VALIDATION_FAILED",
             AccessError::ReadFailed => "PASSWORD_READ_FAILED",
             AccessError::SaveFailed => "PASSWORD_SAVE_FAILED",
+            AccessError::BackupSyncFailed => "PASSWORD_BACKUP_SYNC_FAILED",
             AccessError::TooManyAttempts => "PASSWORD_TOO_MANY_ATTEMPTS",
         };
         Self {

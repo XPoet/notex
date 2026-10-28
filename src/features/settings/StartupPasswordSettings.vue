@@ -68,7 +68,9 @@ async function submit(): Promise<void> {
     visible.value = false
     clearPasswords()
     ElMessage.success(
-      action.value === 'disable' ? '已关闭开启密码。' : '开启密码已保存，下次启动时生效。',
+      action.value === 'disable'
+        ? '已关闭开启密码，自动备份已去除密码。'
+        : '开启密码与自动备份已更新，下次启动时生效。',
     )
   } catch {
     currentPassword.value = ''
@@ -83,13 +85,15 @@ onBeforeUnmount(clearPasswords)
   <article class="password-settings">
     <header>
       <h2>安全</h2>
-      <p>配置打开 NoteX 时使用的密码。</p>
+      <p>配置启动和自动备份使用的密码。</p>
     </header>
     <div class="password-row">
       <span>
         <strong>开启密码</strong>
         <small>{{
-          passwordEnabled ? '已开启，每次启动需输入密码。' : '未设置，打开软件可直接使用。'
+          passwordEnabled
+            ? '已开启，每次启动需输入密码，自动备份使用相同密码。'
+            : '未设置，打开软件可直接使用。'
         }}</small>
       </span>
       <div class="password-actions">
@@ -151,10 +155,12 @@ onBeforeUnmount(clearPasswords)
           :disabled="securityStore.isSaving"
         />
         <p class="password-hint">
-          请牢记密码，忘记后无法通过软件找回。此功能控制启动访问，不加密本地笔记文件。
+          自动备份压缩包会同步使用此密码。请牢记密码，忘记后无法通过软件找回。本地数据库和原始图片不加密。
         </p>
       </template>
-      <p v-else class="password-hint">关闭后，下次打开 NoteX 将直接进入工作区。</p>
+      <p v-else class="password-hint">
+        关闭后，下次打开 NoteX 将直接进入工作区，自动备份压缩包也将去除密码。
+      </p>
       <p v-if="validationError || securityStore.error" class="password-error" role="alert">
         {{ validationError || securityStore.error?.message }}
       </p>

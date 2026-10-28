@@ -2,23 +2,6 @@
 
 NoteX 是一款本地笔记桌面应用。项目使用 Tauri 2、Vue 3、TypeScript、Rust 和 SQLite 构建。
 
-## 开启密码
-
-在「设置 → 安全 → 开启密码」中设置密码后，每次重新启动 NoteX 都需要输入密码才能进入工作区。设置或修改的密码支持 4～20 个字符；修改或关闭密码需要验证当前密码。此前已保存的较长密码仍可用于解锁和验证当前密码。连续输错 5 次后需等待 30 秒再试。
-
-请牢记密码，软件不提供密码找回。此功能控制启动访问，本地笔记、图片和备份仍按现有方式存储，不进行文件加密。
-
-## 下载安装
-
-可从本仓库 [GitHub Releases](https://github.com/XPoet/notex/releases) 最新版本页面 的 **Assets** 直接下载安装包，无需安装开发环境：
-
-| 平台                          | 安装包                                                                                     |
-| ----------------------------- | ------------------------------------------------------------------------------------------ |
-| Windows x64                   | `NoteX_<版本号>_windows_x64-setup.exe`，或用于 MSI 安装的 `NoteX_<版本号>_windows_x64.msi` |
-| macOS Apple Silicon（M 系列） | `NoteX_<版本号>_macos_aarch64.dmg`                                                         |
-
-Windows 运行 EXE 或 MSI 安装；macOS 打开 DMG，将 NoteX 拖入“应用程序”。当前 Windows 安装包未配置代码签名证书，macOS 使用 ad-hoc 签名且未经 Apple 公证，首次安装或启动可能出现系统安全提示。安装说明、校验方法和发布启用步骤见 [发布指南](docs/RELEASE.md)。
-
 ## 技术栈
 
 | 范围       | 技术                                                   |
@@ -170,20 +153,6 @@ pnpm exec tauri build --debug
 ```
 
 该命令用于开发阶段验证当前平台的原生编译和打包链路。
-
-### macOS 应用图标
-
-macOS 打包使用 `src-tauri/icons/icon.icns`，专用源文件为 `src-tauri/icons/macos.svg`。画布为 1024×1024 像素，居中的图标主体为 824×824 像素，四边各保留 100 像素透明留白，使 Launchpad 和 Dock 中的视觉尺寸与 macOS 系统应用一致。修改图标时同步更新该源文件中的 NoteX 标识。
-
-在仓库根目录执行以下命令重新生成 macOS 图标：
-
-```bash
-notex_icon_output="$(mktemp -d)"
-pnpm exec tauri icon src-tauri/icons/macos.svg --output "$notex_icon_output"
-cp "$notex_icon_output/icon.icns" src-tauri/icons/icon.icns
-```
-
-生成的 `.icns` 包含 16、32、128、256、512 点各自的 1× 和 2× 图像，最大分辨率为 1024×1024 像素，符合 [Apple 的 iconset 尺寸规范](https://developer.apple.com/library/archive/documentation/Xcode/Reference/xcode_ref-Asset_Catalog_Format/IconSetType.html)。macOS 的透明留白仅用于该 `.icns`；不要将临时目录中的其他平台图标复制回仓库。
 
 ### macOS 自用 DMG
 

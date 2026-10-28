@@ -122,4 +122,22 @@ describe('开启密码界面', () => {
     expect(wrapper.text()).toContain('未设置')
     wrapper.unmount()
   })
+
+  it('备份密码同步失败时保留当前配置和对话框，显示安全提示', async () => {
+    const wrapper = mountSettings(true)
+    await wrapper.findAll('button')[1]?.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('自动备份压缩包也将去除密码')
+    configureStartupPassword.mockRejectedValueOnce({
+      code: 'PASSWORD_BACKUP_SYNC_FAILED',
+      message: '无法同步自动备份的密码，请检查备份目录后重试。',
+    })
+    await wrapper.get('#current-startup-password').setValue('正确密码123')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(useSecurityStore().snapshot?.passwordEnabled).toBe(true)
+    expect(wrapper.get('[role="alert"]').text()).toContain('无法同步自动备份的密码')
+    expect(wrapper.get('form').isVisible()).toBe(true)
+    wrapper.unmount()
+  })
 })

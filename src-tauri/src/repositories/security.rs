@@ -24,16 +24,25 @@ impl SecurityRepository {
         let transaction = connection
             .transaction()
             .map_err(|_| AccessError::SaveFailed)?;
+        Self::stage_password_hash(&transaction, hash, now)?;
+        transaction.commit().map_err(|_| AccessError::SaveFailed)
+    }
+
+    pub fn stage_password_hash(
+        connection: &Connection,
+        hash: Option<&str>,
+        now: &str,
+    ) -> Result<(), AccessError> {
         match hash {
             Some(value) => {
-                transaction.execute(
+                connection.execute(
           "INSERT INTO app_settings (key, value, updated_at) VALUES ('startup_password_hash', ?1, ?2)
            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
           params![value, now],
         ).map_err(|_| AccessError::SaveFailed)?;
             }
             None => {
-                transaction
+                connection
                     .execute(
                         "DELETE FROM app_settings WHERE key = 'startup_password_hash'",
                         [],
@@ -41,6 +50,6 @@ impl SecurityRepository {
                     .map_err(|_| AccessError::SaveFailed)?;
             }
         }
-        transaction.commit().map_err(|_| AccessError::SaveFailed)
+        Ok(())
     }
 }

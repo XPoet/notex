@@ -42,4 +42,13 @@ describe('开启密码 Service', () => {
       message: '无法读取开启密码配置，请重试。',
     })
   })
+
+  it('保留自动备份同步失败提示', async () => {
+    const error = {
+      code: 'PASSWORD_BACKUP_SYNC_FAILED',
+      message: '无法同步自动备份的密码，请检查备份目录后重试。',
+    }
+    invoke.mockRejectedValue(error)
+    await expect(configureStartupPassword({ newPassword: '1234' })).rejects.toEqual(error)
+  })
 })

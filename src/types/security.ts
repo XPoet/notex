@@ -14,6 +14,7 @@ export type AccessErrorCode =
   | 'PASSWORD_VALIDATION_FAILED'
   | 'PASSWORD_READ_FAILED'
   | 'PASSWORD_SAVE_FAILED'
+  | 'PASSWORD_BACKUP_SYNC_FAILED'
   | 'PASSWORD_TOO_MANY_ATTEMPTS'
 
 export interface AccessError {

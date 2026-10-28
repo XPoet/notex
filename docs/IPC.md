@@ -1,6 +1,6 @@
 # NoteX IPC 契约
 
-> 契约版本：V009
+> 契约版本：V010
 > 最后更新：2026-10-28
 
 ## 1. 通用规则
@@ -55,7 +55,11 @@ Command 委托 Shutdown Service 隐藏主窗口；尚未解锁时直接退出，
 
 ZIP 内按分类层级保存 Markdown，未分类笔记放入“未分类”目录；图片集中保存在 `assets` 并改写相对引用。分类和笔记重名时沿用手动导出的文件名清理、冲突编号规则。回收站、标签、应用设置和数据库文件不参与本次 Markdown 导出。
 
-后台直接流式写入同目录 `NoteX-latest.zip.part`，完成 ZIP 尾部写入并同步文件后，以重命名替换 `NoteX-latest.zip`。正常结束只保留一份 ZIP；任务失败会清理本次中间文件、保留上一份完整 ZIP，不弹出导出进度或错误提示，随后退出进程。后台任务结束前持续拦截重复退出，结束后才允许进程退出。启动未完成或数据库不可用时不得创建空库覆盖旧备份；强制结束、崩溃和断电不在关闭事件保证范围内。
+已开启密码时，所有 Markdown 和图片条目以同一开启密码进行 AES-256 ZIP 加密；未开启时使用普通 ZIP。空笔记库在加密模式下写入一个同样加密的 `NoteX-backup.txt` 说明条目，确保空库备份也需要密码。ZIP 文件名不加密，解压工具须支持 AES ZIP。
+
+Security Service 在会话锁与数据库写锁内重新读取密码配置，验证内存中的备份密码仍匹配当前哈希，再委托 Backup Service 生成 ZIP；已配置密码但缺少有效会话密码时停止备份，不能回退为无密码压缩包。密码配置和退出备份共用锁，防止并发执行时产生不一致的密码。
+
+后台直接流式写入同目录 `NoteX-latest.zip.part`，完成 ZIP 尾部写入并同步文件后，将旧备份暂移到 `NoteX-latest.zip.rollback`，发布新的 `NoteX-latest.zip`，成功后清理回滚文件。正常结束只保留一份 ZIP；任务失败时回滚上一份完整 ZIP，清理本次中间文件，不弹出导出进度或错误提示，随后退出进程。后台任务结束前持续拦截重复退出，结束后才允许进程退出。启动未完成或数据库不可用时不得创建空库覆盖旧备份；强制结束、崩溃和断电不在关闭事件保证范围内。
 
 ## 3. 前端状态
 
@@ -64,14 +68,16 @@ ZIP 内按分类层级保存 Markdown，未分类笔记放入“未分类”目�
 ### 3.1 开启密码接口
 
 - `get_access_status`：无参数，返回 `AccessSnapshot { passwordEnabled: boolean, locked: boolean }`。Rust 只读设置表中的密码哈希，不读取笔记、不运行 Migration、不创建数据库。首次启动数据库不存在时返回未配置密码并允许初始化；数据库或已保存哈希损坏时拒绝进入工作区。
-- `unlock_app`：请求 `{ password: string }`，在阻塞线程使用 Argon2id 校验密码，成功返回已解锁的 `AccessSnapshot`。密码原样校验，保留首尾空格和 Unicode；失败保持锁定。已保存的旧密码仍支持最多 128 个字符的验证，避免新密码长度限制导致无法解锁或修改密码。解锁状态仅保存在当前进程内存，新进程默认重新锁定。
-- `configure_startup_password`：请求 `{ request: { currentPassword?: string, newPassword: string | null } }`，仅允许已解锁会话调用。未设置密码时可直接设置；修改和关闭已配置密码都必须先验证当前密码。`newPassword: null` 表示关闭；字符串必须为 4～20 个 Unicode 字符且不能全部为空白。成功只返回 `AccessSnapshot`，设置立即持久化，下次启动按新配置校验。
+- `unlock_app`：请求 `{ password: string }`，在阻塞线程使用 Argon2id 校验密码，成功返回已解锁的 `AccessSnapshot`。密码原样校验，保留首尾空格和 Unicode；失败保持锁定。已保存的旧密码仍支持最多 128 个字符的验证，避免新密码长度限制导致无法解锁或修改密码。验证成功后同步已有无密码的旧版自动备份；同步失败返回安全错误并保持锁定。解锁状态和备份所需密码仅保存在当前进程内存，新进程默认重新锁定。
+- `configure_startup_password`：请求 `{ request: { currentPassword?: string, newPassword: string | null } }`，仅允许已解锁会话调用。未设置密码时可直接设置；修改和关闭已配置密码都必须先验证当前密码。`newPassword: null` 表示关闭；字符串必须为 4～20 个 Unicode 字符且不能全部为空白。已经存在的自动备份会保留内容、以流式读取方式重新压缩为使用新密码或无密码的 ZIP，不借此用当前数据库覆盖原备份。没有备份时只更新配置，退出时按新配置创建。成功只返回 `AccessSnapshot`，设置立即持久化，下次启动按新配置校验。
 
-密码仅以随机盐的 Argon2id PHC 哈希保存在 `app_settings.startup_password_hash`，不返回前端、不写日志、不进入 Markdown 或关闭备份。密码计算在阻塞线程执行；统一入口只读取原子解锁标记，不等待密码计算。连续输错 5 次后，该进程的解锁及密码变更共用 30 秒冷却；读取状态不能重置失败计数。软件不提供忘记密码找回入口。
+密码仅以随机盐的 Argon2id PHC 哈希保存在 `app_settings.startup_password_hash`。用于 ZIP 加密的密码只在解锁后的 Rust 会话内存中保留，替换、关闭密码或进程结束时通过 `zeroize` 清理；解锁参数和配置请求也在处理完成后清理。密码和哈希不返回前端、不写日志、不进入 Markdown 或关闭备份。密码计算与文件操作在阻塞线程执行；统一入口只读取原子解锁标记，不等待密码计算。连续输错 5 次后，该进程的解锁及密码变更共用 30 秒冷却；读取状态不能重置失败计数。软件不提供忘记密码找回入口。
 
-安全边界：此功能控制应用启动访问，不加密 SQLite、图片、手动导出或备份；有权访问应用数据文件的人仍可直接读取或修改文件。
+配置更新先在数据库事务内暂存密码哈希，生成新的 ZIP 并发布后才提交事务，最后清理回滚文件；压缩、发布或提交失败时恢复原配置和原备份，返回 `PASSWORD_BACKUP_SYNC_FAILED` 或 `PASSWORD_SAVE_FAILED`。异常中断留下回滚文件时，根据当前已验证的密码配置检查新旧 ZIP，保留与已提交配置匹配的一份并清理临时文件；无法验证时保留恢复文件并返回同步错误。
 
-错误码：`APP_LOCKED` ｜ `PASSWORD_INCORRECT` ｜ `PASSWORD_VALIDATION_FAILED` ｜ `PASSWORD_READ_FAILED` ｜ `PASSWORD_SAVE_FAILED` ｜ `PASSWORD_TOO_MANY_ATTEMPTS`。错误只包含稳定码和安全提示，不包含密码、哈希、SQL 或系统路径。
+安全边界：此功能控制应用启动访问并加密自动备份的文件内容，不加密 SQLite、原始图片或手动导出；有权访问应用数据文件的人仍可直接读取或修改这些文件。
+
+错误码：`APP_LOCKED` ｜ `PASSWORD_INCORRECT` ｜ `PASSWORD_VALIDATION_FAILED` ｜ `PASSWORD_READ_FAILED` ｜ `PASSWORD_SAVE_FAILED` ｜ `PASSWORD_BACKUP_SYNC_FAILED` ｜ `PASSWORD_TOO_MANY_ATTEMPTS`。错误只包含稳定码和安全提示，不包含密码、哈希、SQL 或系统路径。
 
 ## 4. 笔记接口
 

@@ -1,4 +1,5 @@
 use tauri::{AppHandle, Manager};
+use zeroize::Zeroizing;
 
 use crate::domain::security::{
     AccessCommandError, AccessError, AccessSnapshot, ConfigurePasswordRequest,
@@ -15,6 +16,7 @@ pub async fn unlock_app(
     app: AppHandle,
     password: String,
 ) -> Result<AccessSnapshot, AccessCommandError> {
+    let password = Zeroizing::new(password);
     run_blocking(app, move |service, state| service.unlock(&state, &password)).await
 }
 
