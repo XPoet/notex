@@ -72,22 +72,33 @@ jobs:
         with:
           node-version: '24'
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@stable
+          cache-dependency-path: pnpm-lock.yaml
+      - uses: dtolnay/rust-toolchain@1.99.1
         with:
           targets: ${{ matrix.target }}
           components: clippy,rustfmt
+      - name: Cache Rust dependencies
+        id: rust-cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: ${{ matrix.target }}
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
       - name: Check release scripts on the native platform
         run: pnpm exec vitest run tests/release-workflow.spec.mjs tests/github-release.spec.mjs
       - name: Check frontend
         if: matrix.target == 'aarch64-apple-darwin'
-        run: pnpm check:frontend
-      - name: Check Rust on the native platform
         run: |
-          cargo fmt --check --manifest-path src-tauri/Cargo.toml
-          cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-          cargo test --locked --manifest-path src-tauri/Cargo.toml
+          pnpm format:check
+          pnpm lint
+          pnpm test
+      - name: Check Rust formatting
+        run: cargo fmt --check --manifest-path src-tauri/Cargo.toml
+      - name: Lint Rust on the native platform
+        run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+      - name: Test Rust on the native platform
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml
       - name: Build installers
         env:
           APPLE_SIGNING_IDENTITY: ${{ runner.os == 'macOS' && '-' || '' }}

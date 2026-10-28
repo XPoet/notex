@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t, localizeMessage, locale } from '@/i18n'
 import { Delete, RefreshLeft, WarningFilled } from '@element-plus/icons-vue'
 import { onMounted, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
@@ -14,11 +15,11 @@ const router = useRouter()
 const isSubmitting = shallowRef(false)
 
 function titleOf(title: string, preview: string): string {
-  return title.trim() || preview || '无标题笔记'
+  return title.trim() || preview || t('无标题笔记')
 }
 
 function deletedAtLabel(value: string): string {
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat(locale.value, {
     month: 'numeric',
     day: 'numeric',
     hour: '2-digit',
@@ -30,9 +31,7 @@ async function restore(id: string): Promise<void> {
   isSubmitting.value = true
   try {
     const result = await restoreNote(id)
-    ElMessage.success(
-      result.restoredToUncategorized ? '原分类已不存在，笔记已恢复到未分类。' : '笔记已恢复。',
-    )
+    ElMessage.success(result.restoredToUncategorized ? t('原分类已不存在，笔记已恢复到未分类。') : t('笔记已恢复。'))
     await trashStore.load()
   } finally {
     isSubmitting.value = false
@@ -40,15 +39,11 @@ async function restore(id: string): Promise<void> {
 }
 
 async function permanentlyDelete(id: string): Promise<void> {
-  const shouldDelete = await ElMessageBox.confirm(
-    '永久删除后无法恢复，是否继续？',
-    '确认永久删除',
-    {
-      confirmButtonText: '永久删除',
-      cancelButtonText: '取消',
-      type: 'warning',
-    },
-  )
+  const shouldDelete = await ElMessageBox.confirm(t('永久删除后无法恢复，是否继续？'), t('确认永久删除'), {
+    confirmButtonText: t('永久删除'),
+    cancelButtonText: t('取消'),
+    type: 'warning',
+  })
     .then(() => true)
     .catch(() => false)
   if (!shouldDelete) {
@@ -58,9 +53,7 @@ async function permanentlyDelete(id: string): Promise<void> {
   try {
     const result = await permanentlyDeleteNote(id)
     ElMessage.success(
-      result.pendingFileCleanupCount > 0
-        ? '笔记已永久删除，少量资源文件将在后续自动清理。'
-        : '笔记已永久删除。',
+      result.pendingFileCleanupCount > 0 ? t('笔记已永久删除，少量资源文件将在后续自动清理。') : t('笔记已永久删除。'),
     )
     await trashStore.load()
   } finally {
@@ -70,9 +63,9 @@ async function permanentlyDelete(id: string): Promise<void> {
 
 async function clearTrash(): Promise<void> {
   const shouldClear = await ElMessageBox.confirm(
-    '将永久删除回收站内的全部笔记，且无法恢复。是否继续？',
-    '确认清空回收站',
-    { confirmButtonText: '清空回收站', cancelButtonText: '取消', type: 'warning' },
+    t('将永久删除回收站内的全部笔记，且无法恢复。是否继续？'),
+    t('确认清空回收站'),
+    { confirmButtonText: t('清空回收站'), cancelButtonText: t('取消'), type: 'warning' },
   )
     .then(() => true)
     .catch(() => false)
@@ -83,9 +76,7 @@ async function clearTrash(): Promise<void> {
   try {
     const result = await emptyTrash()
     ElMessage.success(
-      result.pendingFileCleanupCount > 0
-        ? '回收站已清空，少量资源文件将在后续自动清理。'
-        : '回收站已清空。',
+      result.pendingFileCleanupCount > 0 ? t('回收站已清空，少量资源文件将在后续自动清理。') : t('回收站已清空。'),
     )
     await trashStore.load()
   } finally {
@@ -104,8 +95,8 @@ onMounted(() => {
 
 <template>
   <ManagementLayout
-    title="回收站"
-    description="删除的笔记会保留在这里，直到你手动永久删除。"
+    :title="t('回收站')"
+    :description="t('删除的笔记会保留在这里，直到你手动永久删除。')"
     :categories="categoriesStore.categories"
     :trash-count="trashStore.notes.length"
     @create="createNoteFromSidebar"
@@ -117,53 +108,47 @@ onMounted(() => {
         :disabled="trashStore.notes.length === 0 || isSubmitting"
         :icon="Delete"
         @click="clearTrash"
+        >{{ t('清空回收站') }}</el-button
       >
-        清空回收站
-      </el-button>
     </template>
 
     <p v-if="trashStore.error" class="management-error" role="alert">
-      {{ trashStore.error.message }}
+      {{ localizeMessage(trashStore.error.message) }}
     </p>
     <section v-else-if="!trashStore.isLoading && trashStore.notes.length === 0" class="trash-empty">
       <el-icon><Delete /></el-icon>
-      <h2>回收站为空</h2>
-      <p>删除的笔记会出现在这里，并且可在永久删除前恢复。</p>
+      <h2>{{ t('回收站为空') }}</h2>
+      <p>{{ t('删除的笔记会出现在这里，并且可在永久删除前恢复。') }}</p>
     </section>
     <template v-else>
       <p class="trash-notice" role="note">
-        <el-icon><WarningFilled /></el-icon>
-        永久删除后无法恢复；关联资源会在没有任何笔记引用时清理。
+        <el-icon><WarningFilled /></el-icon>{{ t('永久删除后无法恢复；关联资源会在没有任何笔记引用时清理。') }}
       </p>
       <section class="trash-list">
         <article v-for="note in trashStore.notes" :key="note.id" class="trash-item">
           <div class="trash-note-content">
             <h2 class="trash-title">{{ titleOf(note.title, note.contentPreview) }}</h2>
-            <p class="trash-preview">{{ note.contentPreview || '没有正文内容' }}</p>
+            <p class="trash-preview">{{ note.contentPreview || t('没有正文内容') }}</p>
             <p class="trash-meta">
-              删除于 {{ deletedAtLabel(note.deletedAt)
-              }}{{
-                note.trashedFromCategoryPath ? ` · 原分类：${note.trashedFromCategoryPath}` : ''
+              {{
+                t('删除于 {value1}{value2}', {
+                  value1: deletedAtLabel(note.deletedAt),
+                  value2: note.trashedFromCategoryPath
+                    ? t(' · 原分类：{value1}', { value1: note.trashedFromCategoryPath })
+                    : '',
+                })
               }}
             </p>
           </div>
           <div class="trash-actions">
-            <el-button :loading="isSubmitting" :icon="RefreshLeft" @click="restore(note.id)">
-              恢复
-            </el-button>
-            <el-button
-              type="danger"
-              plain
-              :loading="isSubmitting"
-              :icon="Delete"
-              @click="permanentlyDelete(note.id)"
-            >
-              永久删除
-            </el-button>
+            <el-button :loading="isSubmitting" :icon="RefreshLeft" @click="restore(note.id)">{{ t('恢复') }}</el-button>
+            <el-button type="danger" plain :loading="isSubmitting" :icon="Delete" @click="permanentlyDelete(note.id)">{{
+              t('永久删除')
+            }}</el-button>
           </div>
         </article>
       </section>
-      <p class="trash-count">回收站中共有 {{ trashStore.notes.length }} 篇笔记</p>
+      <p class="trash-count">{{ t('回收站中共有 {value1} 篇笔记', { value1: trashStore.notes.length }) }}</p>
     </template>
   </ManagementLayout>
 </template>

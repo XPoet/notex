@@ -6,7 +6,7 @@ use std::sync::{
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::domain::bootstrap::BootstrapCommandError;
-use crate::services::backup::BackupService;
+use crate::services::security::{AccessState, SecurityService};
 
 const EXIT_REQUESTED_EVENT: &str = "notex-exit-requested";
 
@@ -40,20 +40,29 @@ impl ShutdownState {
                 return Err(BootstrapCommandError::bootstrap_failed());
             }
         }
+        // 尚未解锁时直接退出，避免在密码验证前读取笔记并生成明文备份。
+        if !app.state::<AccessState>().is_unlocked() {
+            app.state::<AccessState>().clear_backup_password();
+            self.0.store(2, Ordering::Release);
+            app.exit(0);
+            return Ok(());
+        }
         // 压缩失败只保留旧备份，不弹窗、不阻止退出；后台任务完成前保持进程存活。
         let backup_result = tauri::async_runtime::spawn_blocking({
             let app = app.clone();
             move || {
-                app.path()
-                    .app_data_dir()
-                    .ok()
-                    .and_then(|directory| BackupService::new(&directory).create_latest().ok())
+                app.path().app_data_dir().ok().and_then(|directory| {
+                    SecurityService::new(&directory)
+                        .create_exit_backup(&app.state::<AccessState>())
+                        .ok()
+                })
             }
         })
         .await;
         if !matches!(backup_result, Ok(Some(()))) {
             eprintln!("NoteX: exit backup failed; previous backup retained.");
         }
+        app.state::<AccessState>().clear_backup_password();
         self.0.store(2, Ordering::Release);
         app.exit(0);
         Ok(())

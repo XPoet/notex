@@ -1,12 +1,14 @@
 <script setup lang="ts">
+import { t, localizeMessage } from '@/i18n'
 import { nextTick, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { showMainWindow } from '@/services/window'
 import { useAppStore } from '@/stores/app'
-import { useSettingsStore } from '@/stores/settings'
+import { useSecurityStore } from '@/stores/security'
+import UnlockScreen from '@/features/security/UnlockScreen.vue'
 
 const appStore = useAppStore()
-const settingsStore = useSettingsStore()
+const securityStore = useSecurityStore()
 const { error, status } = storeToRefs(appStore)
 
 async function showWindowAfterFirstPaint(): Promise<void> {
@@ -20,9 +22,17 @@ async function showWindowAfterFirstPaint(): Promise<void> {
 }
 
 async function initialize(): Promise<void> {
-  await Promise.all([appStore.bootstrap(), settingsStore.load()])
+  await appStore.bootstrap()
   await nextTick()
   await showWindowAfterFirstPaint()
+}
+
+async function unlock(password: string): Promise<void> {
+  try {
+    await appStore.unlock(password)
+  } catch {
+    // 密码错误保留解锁界面，由安全 Store 提供提示。
+  }
 }
 
 onMounted(() => {
@@ -32,16 +42,22 @@ onMounted(() => {
 
 <template>
   <main class="app-bootstrap" aria-live="polite">
-    <section v-if="status === 'failed'" class="diagnostic-panel">
-      <p class="eyebrow">启动诊断</p>
-      <h1 class="diagnostic-title">无法初始化本地数据</h1>
-      <p class="diagnostic-message">{{ error?.message }}</p>
-      <el-button type="primary" @click="appStore.bootstrap">重试</el-button>
+    <UnlockScreen
+      v-if="status === 'locked'"
+      :busy="securityStore.isUnlocking"
+      :error="securityStore.error?.message"
+      @unlock="unlock"
+    />
+    <section v-else-if="status === 'failed'" class="diagnostic-panel">
+      <p class="eyebrow">{{ t('启动诊断') }}</p>
+      <h1 class="diagnostic-title">{{ t('无法初始化本地数据') }}</h1>
+      <p class="diagnostic-message">{{ localizeMessage(error?.message) }}</p>
+      <el-button type="primary" @click="initialize">{{ t('重试') }}</el-button>
     </section>
 
     <section v-else class="loading-panel">
       <span class="loading-icon" aria-hidden="true"></span>
-      <p class="loading-label">正在准备本地工作区…</p>
+      <p class="loading-label">{{ t('正在准备本地工作区…') }}</p>
     </section>
   </main>
 </template>

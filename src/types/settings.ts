@@ -1,7 +1,10 @@
+import type { AppLanguage } from '@/i18n/locale'
+
 export type ThemePreference = 'light' | 'dark' | 'system'
 export type NoteSort = 'updatedAt' | 'createdAt' | 'title'
 
 export interface SettingsSnapshot {
+  language: AppLanguage | null
   theme: ThemePreference
   noteSort: NoteSort
   editorFontSize: 14 | 15 | 16 | 17 | 18
@@ -14,6 +17,7 @@ export interface SettingsSnapshot {
 }
 
 export interface SaveSettingsRequest {
+  language: AppLanguage
   theme: ThemePreference
   noteSort: NoteSort
   editorFontSize: 14 | 15 | 16 | 17 | 18

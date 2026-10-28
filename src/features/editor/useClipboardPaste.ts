@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { readImage } from '@tauri-apps/plugin-clipboard-manager'
 
 const LARGE_IMAGE_BYTES = 10 * 1024 * 1024
@@ -42,7 +43,7 @@ export function useClipboardPaste(handlers: ClipboardPasteHandlers): {
         handlers.insertText(markdown)
       }
     } catch (error: unknown) {
-      handlers.onError(error instanceof Error ? error.message : '图片保存失败，未插入图片引用。')
+      handlers.onError(error instanceof Error ? error.message : t('图片保存失败，未插入图片引用。'))
     }
   }
 
@@ -51,7 +52,7 @@ export function useClipboardPaste(handlers: ClipboardPasteHandlers): {
       const markdown = await saveClipboardBitmap(handlers.saveImage)
       handlers.insertText(markdown)
     } catch (error: unknown) {
-      handlers.onError(error instanceof Error ? error.message : '图片保存失败，未插入图片引用。')
+      handlers.onError(error instanceof Error ? error.message : t('图片保存失败，未插入图片引用。'))
     }
   }
 
@@ -74,9 +75,7 @@ function findClipboardImage(clipboardData: DataTransfer | null): File | undefine
   return undefined
 }
 
-export async function saveClipboardBitmap(
-  saveImage: (bytes: Uint8Array) => Promise<string>,
-): Promise<string> {
+export async function saveClipboardBitmap(saveImage: (bytes: Uint8Array) => Promise<string>): Promise<string> {
   const clipboardImage = await readImage()
   try {
     const [size, rgba] = await Promise.all([clipboardImage.size(), clipboardImage.rgba()])
@@ -85,12 +84,12 @@ export async function saveClipboardBitmap(
     canvas.height = size.height
     const context = canvas.getContext('2d')
     if (context === null) {
-      throw new Error('当前环境无法处理剪贴板位图。')
+      throw new Error(t('当前环境无法处理剪贴板位图。'))
     }
     context.putImageData(new ImageData(new Uint8ClampedArray(rgba), size.width, size.height), 0, 0)
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
     if (blob === null) {
-      throw new Error('无法将剪贴板位图编码为 PNG。')
+      throw new Error(t('无法将剪贴板位图编码为 PNG。'))
     }
     if (!(await confirmLargeImage(blob.size))) {
       return ''
@@ -105,7 +104,7 @@ async function confirmLargeImage(size: number): Promise<boolean> {
   if (size < LARGE_IMAGE_BYTES) {
     return true
   }
-  return window.confirm(`图片大小为 ${formatFileSize(size)}。继续粘贴将按原始大小保存到本机。`)
+  return window.confirm(t('图片大小为 {value1}。继续粘贴将按原始大小保存到本机。', { value1: formatFileSize(size) }))
 }
 
 function formatFileSize(size: number): string {

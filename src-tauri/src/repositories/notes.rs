@@ -7,6 +7,30 @@ use crate::repositories::search::SearchRepository;
 pub struct NotesRepository;
 
 impl NotesRepository {
+    pub fn import(
+        connection: &mut Connection,
+        id: &str,
+        title: &str,
+        content: &str,
+        now: &str,
+    ) -> Result<NoteDetail, NoteError> {
+        let transaction = connection
+            .transaction()
+            .map_err(|_| NoteError::SaveFailed)?;
+        transaction
+            .execute(
+                "INSERT INTO notes (id, title, content, category_id, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, NULL, ?4, ?4)",
+                params![id, title, content, now],
+            )
+            .map_err(|_| NoteError::SaveFailed)?;
+        SearchRepository::refresh_note_in_transaction(&transaction, id)
+            .map_err(|_| NoteError::SaveFailed)?;
+        let note = Self::find_detail(&transaction, id)?;
+        transaction.commit().map_err(|_| NoteError::SaveFailed)?;
+        Ok(note)
+    }
+
     pub fn create(
         connection: &mut Connection,
         id: &str,

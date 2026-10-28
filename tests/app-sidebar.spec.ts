@@ -1,7 +1,7 @@
 import { defineComponent, h } from 'vue'
 import { mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import AppSidebar from '@/layouts/AppSidebar.vue'
 import { UNCATEGORIZED_CATEGORY_ID } from '@/types/categories'
 
@@ -33,12 +33,38 @@ function createTestRouter() {
       { path: '/tags', name: 'tags', component: EmptyView },
       { path: '/trash', name: 'trash', component: EmptyView },
       { path: '/search', name: 'search', component: EmptyView },
+      { path: '/imports', name: 'imports', component: EmptyView },
       { path: '/settings', name: 'settings', component: EmptyView },
     ],
   })
 }
 
 describe('AppSidebar', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it.each([
+    ['macOS', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', '⌘ N', 'Meta+N'],
+    ['Windows', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', 'Ctrl + N', 'Control+N'],
+  ])('在 %s 显示对应的新建笔记快捷键', async (_platform, userAgent, label, keys) => {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(userAgent)
+    const router = createTestRouter()
+    await router.push('/')
+    await router.isReady()
+    const wrapper = mount(AppSidebar, {
+      props: { categories: [] },
+      global: { plugins: [router], stubs: { ElButton: ButtonStub, ElIcon: IconStub } },
+    })
+
+    const button = wrapper.get('.sidebar-create-button')
+    expect(button.get('kbd').text()).toBe(label)
+    expect(button.attributes('title')).toBe(`新建笔记（${label}）`)
+    expect(button.attributes('aria-keyshortcuts')).toBe(keys)
+    expect(button.attributes('aria-label')).toBe('新建笔记')
+    wrapper.unmount()
+  })
+
   it('为所有管理页面和分类筛选提供路由入口', async () => {
     const router = createTestRouter()
     await router.push('/')
@@ -73,6 +99,7 @@ describe('AppSidebar', () => {
     expect(hrefs).toContain(router.resolve({ name: 'tags' }).href)
     expect(hrefs).toContain(router.resolve({ name: 'trash' }).href)
     expect(hrefs).toContain(router.resolve({ name: 'search' }).href)
+    expect(hrefs).toContain(router.resolve({ name: 'imports' }).href)
     expect(hrefs).toContain(router.resolve({ name: 'settings' }).href)
     expect(hrefs).toContain(router.resolve({ name: 'workbench', query: { category: 'work' } }).href)
     expect(hrefs).toContain(
@@ -122,6 +149,19 @@ describe('AppSidebar', () => {
     await wrapper.get('.sidebar-create-button').trigger('click')
 
     expect(wrapper.emitted('create')).toHaveLength(1)
+  })
+
+  it('导入笔记入口显示当前页面的激活状态', async () => {
+    const router = createTestRouter()
+    await router.push('/imports')
+    await router.isReady()
+    const wrapper = mount(AppSidebar, {
+      props: { categories: [] },
+      global: { plugins: [router], stubs: { ElButton: ButtonStub, ElIcon: IconStub } },
+    })
+    const link = wrapper.get('a[href="/imports"]')
+    expect(link.text()).toBe('导入笔记')
+    expect(link.classes()).toContain('sidebar-nav-item--active')
   })
 
   it('分类不再显示笔记数量，同时保留分类导航入口', async () => {

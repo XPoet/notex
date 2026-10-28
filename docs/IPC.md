@@ -1,13 +1,14 @@
 # NoteX IPC 契约
 
-> 契约版本：V008
-> 最后更新：2026-07-26
+> 契约版本：V010
+> 最后更新：2026-10-28
 
 ## 1. 通用规则
 
 - Vue 组件只能调用 TypeScript Service；Service 统一封装 Tauri `invoke`。
 - Command 仅负责参数反序列化、线程调度和 Service 调用；不得接收前端提供的数据库路径或任意文件路径。`export_notes.targetDirectory` 是唯一例外：前端 Service 只传递系统目录选择器的结果，Rust 仍不信任该值，必须将其规范化并验证为已存在的本地目录。
 - 失败以稳定错误码返回，前端仅展示安全诊断信息，不显示 SQL、系统绝对路径或笔记内容。
+- Rust 在应用 Command 的统一入口校验解锁状态。新进程默认锁定，仅放行 `get_access_status`、`unlock_app`、`show_main_window` 和 `exit_application`；其他接口（包括初始化、设置、图片、搜索、导入和导出）在解锁前统一返回 `APP_LOCKED`。
 
 ## 2. `bootstrap_app`
 
@@ -42,7 +43,7 @@
 
 无参数，成功返回空值。
 
-前端只可在本地数据和设置初始化完成、首帧 UI 已绘制后，通过 TypeScript Window Service 调用。Command 只操作固定标签为 `main` 的应用窗口，显示并聚焦该窗口；不接收窗口标签、路径或其他前端参数。原生窗口创建时使用与启动面板一致的暖色背景，避免页面资源尚未加载时暴露系统白底。失败复用 `BootstrapError` 的安全错误码和提示。
+前端在启动解锁页、诊断页或工作区的首帧 UI 已绘制后，通过 TypeScript Window Service 调用。Command 只操作固定标签为 `main` 的应用窗口，显示并聚焦该窗口；不接收窗口标签、路径或其他前端参数。原生窗口创建时使用与启动面板一致的暖色背景，避免页面资源尚未加载时暴露系统白底。失败复用 `BootstrapError` 的安全错误码和提示。
 
 ### 2.2 应用关闭与 `exit_application`
 
@@ -50,15 +51,33 @@
 
 前端串行保存当前草稿，保存期间若有新的编辑则继续保存最新版本；保存失败时阻止关闭并展示重试提示。保存成功后调用 `exit_application`，无参数，成功返回空值，窗口操作失败复用 `BootstrapError`。重复关闭请求不会启动多份备份。
 
-Command 委托 Shutdown Service 隐藏主窗口并等待后台阻塞任务：Backup Service 通过 Export Repository 在同一数据库事务中读取所有未删除笔记、分类层级和关联图片，生成应用数据目录内固定的 `backups/NoteX-latest.zip`。本功能不接受前端路径，也不受手动导出默认目录或当前筛选条件影响。
+Command 委托 Shutdown Service 隐藏主窗口；尚未解锁时直接退出，不读取笔记或创建备份。已解锁时等待后台阻塞任务：Backup Service 通过 Export Repository 在同一数据库事务中读取所有未删除笔记、分类层级和关联图片，生成应用数据目录内固定的 `backups/NoteX-latest.zip`。本功能不接受前端路径，也不受手动导出默认目录或当前筛选条件影响。
 
 ZIP 内按分类层级保存 Markdown，未分类笔记放入“未分类”目录；图片集中保存在 `assets` 并改写相对引用。分类和笔记重名时沿用手动导出的文件名清理、冲突编号规则。回收站、标签、应用设置和数据库文件不参与本次 Markdown 导出。
 
-后台直接流式写入同目录 `NoteX-latest.zip.part`，完成 ZIP 尾部写入并同步文件后，以重命名替换 `NoteX-latest.zip`。正常结束只保留一份 ZIP；任务失败会清理本次中间文件、保留上一份完整 ZIP，不弹出导出进度或错误提示，随后退出进程。后台任务结束前持续拦截重复退出，结束后才允许进程退出。启动未完成或数据库不可用时不得创建空库覆盖旧备份；强制结束、崩溃和断电不在关闭事件保证范围内。
+已开启密码时，所有 Markdown 和图片条目以同一开启密码进行 AES-256 ZIP 加密；未开启时使用普通 ZIP。空笔记库在加密模式下写入一个同样加密的 `NoteX-backup.txt` 说明条目，确保空库备份也需要密码。ZIP 文件名不加密，解压工具须支持 AES ZIP。
+
+Security Service 在会话锁与数据库写锁内重新读取密码配置，验证内存中的备份密码仍匹配当前哈希，再委托 Backup Service 生成 ZIP；已配置密码但缺少有效会话密码时停止备份，不能回退为无密码压缩包。密码配置和退出备份共用锁，防止并发执行时产生不一致的密码。
+
+后台直接流式写入同目录 `NoteX-latest.zip.part`，完成 ZIP 尾部写入并同步文件后，将旧备份暂移到 `NoteX-latest.zip.rollback`，发布新的 `NoteX-latest.zip`，成功后清理回滚文件。正常结束只保留一份 ZIP；任务失败时回滚上一份完整 ZIP，清理本次中间文件，不弹出导出进度或错误提示，随后退出进程。后台任务结束前持续拦截重复退出，结束后才允许进程退出。启动未完成或数据库不可用时不得创建空库覆盖旧备份；强制结束、崩溃和断电不在关闭事件保证范围内。
 
 ## 3. 前端状态
 
-`app` Pinia Store 管理 `idle`、`loading`、`ready`、`failed` 四种启动状态。只有该 Store 的 `ready` 才渲染路由；设置 Store 的临时加载状态不得切换回启动遮罩。当前接口不提供修改或迁移数据目录的能力。
+`app` Pinia Store 管理 `idle`、`loading`、`locked`、`ready`、`failed` 五种启动状态。先读取开启密码状态：配置密码且尚未解锁时仅渲染解锁页，不初始化笔记工作区或读取完整设置；解锁后先完成 `bootstrap_app`，再加载设置，最后切换为 `ready`。无密码时沿相同顺序直接初始化。配置读取失败进入诊断页，不能回退到免密码启动。只有 `ready` 才渲染路由；设置 Store 的临时加载状态不得切换回启动遮罩。当前接口不提供修改或迁移数据目录的能力。
+
+### 3.1 开启密码接口
+
+- `get_access_status`：无参数，返回 `AccessSnapshot { passwordEnabled: boolean, locked: boolean }`。Rust 只读设置表中的密码哈希，不读取笔记、不运行 Migration、不创建数据库。首次启动数据库不存在时返回未配置密码并允许初始化；数据库或已保存哈希损坏时拒绝进入工作区。
+- `unlock_app`：请求 `{ password: string }`，在阻塞线程使用 Argon2id 校验密码，成功返回已解锁的 `AccessSnapshot`。密码原样校验，保留首尾空格和 Unicode；失败保持锁定。已保存的旧密码仍支持最多 128 个字符的验证，避免新密码长度限制导致无法解锁或修改密码。验证成功后同步已有无密码的旧版自动备份；同步失败返回安全错误并保持锁定。解锁状态和备份所需密码仅保存在当前进程内存，新进程默认重新锁定。
+- `configure_startup_password`：请求 `{ request: { currentPassword?: string, newPassword: string | null } }`，仅允许已解锁会话调用。未设置密码时可直接设置；修改和关闭已配置密码都必须先验证当前密码。`newPassword: null` 表示关闭；字符串必须为 4～20 个 Unicode 字符且不能全部为空白。已经存在的自动备份会保留内容、以流式读取方式重新压缩为使用新密码或无密码的 ZIP，不借此用当前数据库覆盖原备份。没有备份时只更新配置，退出时按新配置创建。成功只返回 `AccessSnapshot`，设置立即持久化，下次启动按新配置校验。
+
+密码仅以随机盐的 Argon2id PHC 哈希保存在 `app_settings.startup_password_hash`。用于 ZIP 加密的密码只在解锁后的 Rust 会话内存中保留，替换、关闭密码或进程结束时通过 `zeroize` 清理；解锁参数和配置请求也在处理完成后清理。密码和哈希不返回前端、不写日志、不进入 Markdown 或关闭备份。密码计算与文件操作在阻塞线程执行；统一入口只读取原子解锁标记，不等待密码计算。连续输错 5 次后，该进程的解锁及密码变更共用 30 秒冷却；读取状态不能重置失败计数。软件不提供忘记密码找回入口。
+
+配置更新先在数据库事务内暂存密码哈希，生成新的 ZIP 并发布后才提交事务，最后清理回滚文件；压缩、发布或提交失败时恢复原配置和原备份，返回 `PASSWORD_BACKUP_SYNC_FAILED` 或 `PASSWORD_SAVE_FAILED`。异常中断留下回滚文件时，根据当前已验证的密码配置检查新旧 ZIP，保留与已提交配置匹配的一份并清理临时文件；无法验证时保留恢复文件并返回同步错误。
+
+安全边界：此功能控制应用启动访问并加密自动备份的文件内容，不加密 SQLite、原始图片或手动导出；有权访问应用数据文件的人仍可直接读取或修改这些文件。
+
+错误码：`APP_LOCKED` ｜ `PASSWORD_INCORRECT` ｜ `PASSWORD_VALIDATION_FAILED` ｜ `PASSWORD_READ_FAILED` ｜ `PASSWORD_SAVE_FAILED` ｜ `PASSWORD_BACKUP_SYNC_FAILED` ｜ `PASSWORD_TOO_MANY_ATTEMPTS`。错误只包含稳定码和安全提示，不包含密码、哈希、SQL 或系统路径。
 
 ## 4. 笔记接口
 
@@ -208,21 +227,24 @@ Rust 必须根据字节文件头识别 PNG、JPEG、WebP 或 GIF，并以受限�
 
 无参数。返回 `SettingsSnapshot`：
 
-| 字段                              | 类型                                    | 说明                                               |
-| --------------------------------- | --------------------------------------- | -------------------------------------------------- |
-| `theme`                           | `'light' ｜ 'dark' ｜ 'system'`         | 默认 `system`；前端在启动前据此设置根元素属性      |
-| `noteSort`                        | `'updatedAt' ｜ 'createdAt' ｜ 'title'` | 默认 `updatedAt`                                   |
-| `editorFontSize`                  | `14 ｜ 15 ｜ 16 ｜ 17 ｜ 18`            | 默认 `15`，单位为 px                               |
-| `showCategoryCounts`              | boolean                                 | 默认 `true`；保留兼容，侧栏不再显示数量            |
-| `dataDirectory`                   | string                                  | 系统应用数据目录的绝对路径，仅供设置页只读展示     |
-| `defaultExportDirectory`          | string                                  | 当前有效的默认导出目录绝对路径；未配置时为桌面目录 |
-| `hasCustomDefaultExportDirectory` | boolean                                 | 是否已保存用户选择的默认导出目录                   |
-| `appVersion`                      | string                                  | 由应用包版本读取                                   |
-| `schemaVersion`                   | number                                  | 最后成功 Migration 版本                            |
+| 字段                              | 类型                                    | 说明                                                                      |
+| --------------------------------- | --------------------------------------- | ------------------------------------------------------------------------- |
+| `language`                        | `'zh-CN' ｜ 'zh-TW' ｜ 'en' ｜ null`    | 未保存或存储值无效时返回 `null`；前端默认匹配系统语种，无法匹配时使用英语 |
+| `theme`                           | `'light' ｜ 'dark' ｜ 'system'`         | 默认 `system`；前端在启动前据此设置根元素属性                             |
+| `noteSort`                        | `'updatedAt' ｜ 'createdAt' ｜ 'title'` | 默认 `updatedAt`                                                          |
+| `editorFontSize`                  | `14 ｜ 15 ｜ 16 ｜ 17 ｜ 18`            | 默认 `15`，单位为 px                                                      |
+| `showCategoryCounts`              | boolean                                 | 默认 `true`；保留兼容，侧栏不再显示数量                                   |
+| `dataDirectory`                   | string                                  | 系统应用数据目录的绝对路径，仅供设置页只读展示                            |
+| `defaultExportDirectory`          | string                                  | 当前有效的默认导出目录绝对路径；未配置时为桌面目录                        |
+| `hasCustomDefaultExportDirectory` | boolean                                 | 是否已保存用户选择的默认导出目录                                          |
+| `appVersion`                      | string                                  | 由应用包版本读取                                                          |
+| `schemaVersion`                   | number                                  | 最后成功 Migration 版本                                                   |
 
 ### `save_settings`
 
-请求：`{ theme, noteSort, editorFontSize, showCategoryCounts, defaultExportDirectory? }`。所有非路径值必须是上述枚举或范围内的值；`defaultExportDirectory` 只能来自系统目录选择器，Rust 规范化、验证存在和可写后保存。省略该字段时保留当前默认导出目录，传入 `null` 时清除并回退到桌面目录。成功返回完整 `SettingsSnapshot`；其中数据目录和当前有效的默认导出目录绝对路径仅用于设置页只读展示及导出默认值，前端不得将它们拼接为任意文件访问请求。
+请求：`{ language, theme, noteSort, editorFontSize, showCategoryCounts, defaultExportDirectory? }`。所有非路径值必须是上述枚举或范围内的值；`defaultExportDirectory` 只能来自系统目录选择器，Rust 规范化、验证存在和可写后保存。省略该字段时保留当前默认导出目录，传入 `null` 时清除并回退到桌面目录。成功返回完整 `SettingsSnapshot`；其中数据目录和当前有效的默认导出目录绝对路径仅用于设置页只读展示及导出默认值，前端不得将它们拼接为任意文件访问请求。
+
+`language` 保存请求只接受三种具体语种，不接受 `null` 或 `system`。保存成功后立即更新界面及日期格式。WebView 仅在 `notex.language` 缓存该语种，供加载和解锁前恢复界面使用，不缓存笔记或其他设置，也不改变启动访问控制；解锁后的设置快照以数据库为准。
 
 ### `open_data_directory`
 
@@ -280,3 +302,21 @@ Rust 必须根据字节文件头识别 PNG、JPEG、WebP 或 GIF，并以受限�
 ### 导出错误码
 
 `EXPORT_VALIDATION_FAILED` ｜ `EXPORT_SCOPE_NOT_FOUND` ｜ `EXPORT_TARGET_UNAVAILABLE` ｜ `EXPORT_SNAPSHOT_FAILED` ｜ `EXPORT_WRITE_FAILED` ｜ `EXPORT_PROGRESS_UNAVAILABLE` ｜ `EXPORT_TASK_NOT_FOUND` ｜ `EXPORT_OPEN_FAILED`
+
+## 13. 笔记导入接口
+
+### `import_note`
+
+请求：`{ fileName: string, bytes: number[] }`。成功返回完整 `NoteDetail`。
+
+导入页 `/imports` 复用管理页布局，支持文件选择和拖入、多文件清单、逐篇进度、成功后查看以及失败项重试。每批最多 100 个文件，由前端串行调用；单篇失败不阻断后续文件，重试只处理失败项，已成功项不会重复导入。切换页面会保留当前会话清单；重启后不保留清单。
+
+文件由用户通过浏览器文件选择控件或拖入显式提供。前端 Service 读取原始字节，不能传入本机路径，Rust 也不读取前端指定的外部文件。无需新增文件系统权限或 Capability。前后端均限制单文件不超过 10 MiB，Rust 重新校验文件名不含路径分隔符和控制字符、扩展名为 `.md` 或 `.txt`（忽略大小写），不信任 MIME 类型。
+
+Rust 支持 UTF-8（含可选 BOM）以及带 BOM 的 UTF-16 LE / BE，严格拒绝无效编码、NUL 和非文本控制字符，不以替换字符静默修复。其他编码需先转换。正文保留原有文本与换行；不解析 Markdown 标题、分类或标签，也不读取 Markdown 引用的图片或其他文件。
+
+笔记名使用去掉最后一个扩展名的文件名，不得为空白，沿用笔记的 4,000 字符标题和 4,000,000 字符正文限制。每次调用生成新 UUID，允许同名笔记；分类固定为 `NULL`（未分类），不置顶。Command 在阻塞线程委托 Import Service 校验与解码，再由 Notes Repository 在同一事务内插入完整笔记和搜索索引；失败时不留下空白或部分笔记。整个流程不修改源文件，不需要数据库结构变更。
+
+### 导入错误码
+
+`IMPORT_VALIDATION_FAILED` ｜ `IMPORT_UNSUPPORTED_FORMAT` ｜ `IMPORT_FILE_TOO_LARGE` ｜ `IMPORT_INVALID_ENCODING` ｜ `IMPORT_SAVE_FAILED`。前端文件读取失败使用 `IMPORT_READ_FAILED`。界面仅展示安全提示，不显示路径、正文或系统原始错误。

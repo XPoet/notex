@@ -17,6 +17,7 @@ const router = createRouter({
     { path: '/tags', name: 'tags', component: () => import('@/views/TagsView.vue') },
     { path: '/trash', name: 'trash', component: () => import('@/views/TrashView.vue') },
     { path: '/search', name: 'search', component: () => import('@/views/SearchView.vue') },
+    { path: '/imports', name: 'imports', component: () => import('@/views/ImportView.vue') },
     { path: '/settings', name: 'settings', component: () => import('@/views/SettingsView.vue') },
   ],
 })

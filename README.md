@@ -2,16 +2,7 @@
 
 NoteX 是一款本地笔记桌面应用。项目使用 Tauri 2、Vue 3、TypeScript、Rust 和 SQLite 构建。
 
-## 下载安装
-
-可从本仓库 [GitHub Releases](https://github.com/XPoet/notex/releases) 最新版本页面 的 **Assets** 直接下载安装包，无需安装开发环境：
-
-| 平台                          | 安装包                                                                                     |
-| ----------------------------- | ------------------------------------------------------------------------------------------ |
-| Windows x64                   | `NoteX_<版本号>_windows_x64-setup.exe`，或用于 MSI 安装的 `NoteX_<版本号>_windows_x64.msi` |
-| macOS Apple Silicon（M 系列） | `NoteX_<版本号>_macos_aarch64.dmg`                                                         |
-
-Windows 运行 EXE 或 MSI 安装；macOS 打开 DMG，将 NoteX 拖入“应用程序”。当前 Windows 安装包未配置代码签名证书，macOS 使用 ad-hoc 签名且未经 Apple 公证，首次安装或启动可能出现系统安全提示。安装说明、校验方法和发布启用步骤见 [发布指南](docs/RELEASE.md)。
+支持简体中文、繁體中文和 English，可在“设置 → 界面语言”中切换，立即生效并保存到本机。未手动选择时，默认匹配系统语种；中文根据 Hans / Hant 文字标记或地区匹配简繁体，台湾、香港和澳门使用繁体中文，其余中文使用简体中文，其他语种使用英语。语言选择不提供“跟随系统”选项。切换语言不会改写笔记正文、分类名或标签名。
 
 ## 技术栈
 
@@ -164,20 +155,6 @@ pnpm exec tauri build --debug
 ```
 
 该命令用于开发阶段验证当前平台的原生编译和打包链路。
-
-### macOS 应用图标
-
-macOS 打包使用 `src-tauri/icons/icon.icns`，专用源文件为 `src-tauri/icons/macos.svg`。画布为 1024×1024 像素，居中的图标主体为 824×824 像素，四边各保留 100 像素透明留白，使 Launchpad 和 Dock 中的视觉尺寸与 macOS 系统应用一致。修改图标时同步更新该源文件中的 NoteX 标识。
-
-在仓库根目录执行以下命令重新生成 macOS 图标：
-
-```bash
-notex_icon_output="$(mktemp -d)"
-pnpm exec tauri icon src-tauri/icons/macos.svg --output "$notex_icon_output"
-cp "$notex_icon_output/icon.icns" src-tauri/icons/icon.icns
-```
-
-生成的 `.icns` 包含 16、32、128、256、512 点各自的 1× 和 2× 图像，最大分辨率为 1024×1024 像素，符合 [Apple 的 iconset 尺寸规范](https://developer.apple.com/library/archive/documentation/Xcode/Reference/xcode_ref-Asset_Catalog_Format/IconSetType.html)。macOS 的透明留白仅用于该 `.icns`；不要将临时目录中的其他平台图标复制回仓库。
 
 ### macOS 自用 DMG
 

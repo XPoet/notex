@@ -2,6 +2,35 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+pub enum AppLanguage {
+    #[serde(rename = "zh-CN")]
+    SimplifiedChinese,
+    #[serde(rename = "zh-TW")]
+    TraditionalChinese,
+    #[serde(rename = "en")]
+    English,
+}
+
+impl AppLanguage {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::SimplifiedChinese => "zh-CN",
+            Self::TraditionalChinese => "zh-TW",
+            Self::English => "en",
+        }
+    }
+
+    pub fn from_stored(value: &str) -> Option<Self> {
+        match value {
+            "zh-CN" => Some(Self::SimplifiedChinese),
+            "zh-TW" => Some(Self::TraditionalChinese),
+            "en" => Some(Self::English),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum ThemePreference {
     Light,
@@ -65,6 +94,7 @@ impl NoteSort {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SettingsSnapshot {
+    pub language: Option<AppLanguage>,
     pub theme: ThemePreference,
     pub note_sort: NoteSort,
     pub editor_font_size: u8,
@@ -79,6 +109,7 @@ pub struct SettingsSnapshot {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveSettingsRequest {
+    pub language: AppLanguage,
     pub theme: ThemePreference,
     pub note_sort: NoteSort,
     pub editor_font_size: u8,

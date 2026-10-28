@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { StarFilled } from '@element-plus/icons-vue'
 import { computed, shallowRef } from 'vue'
 import HighlightedText from '@/components/HighlightedText.vue'
@@ -25,7 +26,7 @@ function startDrag(event: DragEvent): void {
 
 const displayTitle = computed(() => {
   const title = props.note.title.trim()
-  return title.length > 0 ? title : '无标题笔记'
+  return title.length > 0 ? title : t('无标题笔记')
 })
 </script>
 
@@ -35,7 +36,7 @@ const displayTitle = computed(() => {
     :class="{ 'note-list-item--selected': selected, 'note-list-item--dragging': isDragging }"
     type="button"
     draggable="true"
-    title="拖动到左侧分类以移动笔记"
+    :title="t('拖动到左侧分类以移动笔记')"
     :aria-current="selected ? 'page' : undefined"
     @click="emit('select', note.id)"
     @dragstart="startDrag"
@@ -51,7 +52,7 @@ const displayTitle = computed(() => {
     </span>
     <span class="note-list-item-content">
       <span class="note-list-item-preview">
-        <HighlightedText :text="note.contentPreview || '尚未记录内容'" :query="searchQuery" />
+        <HighlightedText :text="note.contentPreview || t('尚未记录内容')" :query="searchQuery" />
       </span>
     </span>
   </button>

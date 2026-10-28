@@ -1,14 +1,6 @@
 <script setup lang="ts">
-import {
-  Delete,
-  Document,
-  Folder,
-  MoreFilled,
-  Plus,
-  PriceTag,
-  Search,
-  Setting,
-} from '@element-plus/icons-vue'
+import { t } from '@/i18n'
+import { Delete, Document, Folder, MoreFilled, Plus, PriceTag, Search, Setting, Upload } from '@element-plus/icons-vue'
 import { computed, shallowRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import noteXIcon from '@/assets/notex-icon.svg'
@@ -28,6 +20,9 @@ const emit = defineEmits<{
 }>()
 
 const dropTargetId = shallowRef<string>()
+const isMac = navigator.userAgent.includes('Mac')
+const createShortcutLabel = isMac ? '⌘ N' : 'Ctrl + N'
+const createShortcutKeys = isMac ? 'Meta+N' : 'Control+N'
 watch(
   () => props.noteDropEnabled,
   (enabled) => {
@@ -36,9 +31,7 @@ watch(
 )
 
 function acceptsNote(event: DragEvent): boolean {
-  return (
-    props.noteDropEnabled === true && event.dataTransfer?.types.includes(NOTE_DRAG_TYPE) === true
-  )
+  return props.noteDropEnabled === true && event.dataTransfer?.types.includes(NOTE_DRAG_TYPE) === true
 }
 
 function dragOverCategory(event: DragEvent, categoryId: string): void {
@@ -69,13 +62,9 @@ function dropNote(event: DragEvent, categoryId?: string): void {
 
 const route = useRoute()
 const activeRouteName = computed(() => route.name)
-const activeCategoryId = computed(() =>
-  typeof route.query.category === 'string' ? route.query.category : undefined,
-)
+const activeCategoryId = computed(() => (typeof route.query.category === 'string' ? route.query.category : undefined))
 const visibleCategories = computed(() => flattenCategories(props.categories))
-function isActive(
-  name: 'workbench' | 'categories' | 'tags' | 'trash' | 'search' | 'settings',
-): boolean {
+function isActive(name: 'workbench' | 'categories' | 'tags' | 'trash' | 'search' | 'imports' | 'settings'): boolean {
   if (name === 'workbench') {
     return activeRouteName.value === name && activeCategoryId.value === undefined
   }
@@ -108,50 +97,52 @@ function flattenCategories(categories: CategoryNode[]): CategoryNode[] {
           <strong class="sidebar-brand-name">NoteX</strong>
         </span>
       </RouterLink>
-      <el-button class="sidebar-create-button" :icon="Plus" type="primary" @click="emit('create')">
-        新建笔记
+      <el-button
+        class="sidebar-create-button"
+        :icon="Plus"
+        type="primary"
+        :aria-label="t('新建笔记')"
+        :aria-keyshortcuts="createShortcutKeys"
+        :title="t('新建笔记（{value1}）', { value1: createShortcutLabel })"
+        @click="emit('create')"
+      >
+        <span>{{ t('新建笔记') }}</span>
+        <kbd class="sidebar-create-shortcut">{{ createShortcutLabel }}</kbd>
       </el-button>
     </div>
 
     <nav class="sidebar-nav">
-      <RouterLink
-        class="sidebar-nav-item"
-        :class="{ 'sidebar-nav-item--active': isActive('workbench') }"
-        to="/"
-      >
+      <RouterLink class="sidebar-nav-item" :class="{ 'sidebar-nav-item--active': isActive('workbench') }" to="/">
         <el-icon><Document /></el-icon>
-        <span>全部笔记</span>
+        <span>{{ t('全部笔记') }}</span>
       </RouterLink>
-      <RouterLink
-        class="sidebar-nav-item"
-        :class="{ 'sidebar-nav-item--active': isActive('search') }"
-        to="/search"
-      >
+      <RouterLink class="sidebar-nav-item" :class="{ 'sidebar-nav-item--active': isActive('search') }" to="/search">
         <el-icon><Search /></el-icon>
-        <span>全局搜索</span>
+        <span>{{ t('全局搜索') }}</span>
       </RouterLink>
-      <RouterLink
-        class="sidebar-nav-item"
-        :class="{ 'sidebar-nav-item--active': isActive('tags') }"
-        to="/tags"
-      >
+      <RouterLink class="sidebar-nav-item" :class="{ 'sidebar-nav-item--active': isActive('tags') }" to="/tags">
         <el-icon><PriceTag /></el-icon>
-        <span>标签</span>
+        <span>{{ t('标签') }}</span>
       </RouterLink>
       <RouterLink
         class="sidebar-nav-item"
-        :class="{ 'sidebar-nav-item--active': isActive('trash') }"
-        to="/trash"
+        :class="{ 'sidebar-nav-item--active': isActive('imports') }"
+        to="/imports"
+        :title="t('导入笔记')"
       >
+        <el-icon><Upload /></el-icon>
+        <span>{{ t('导入笔记') }}</span>
+      </RouterLink>
+      <RouterLink class="sidebar-nav-item" :class="{ 'sidebar-nav-item--active': isActive('trash') }" to="/trash">
         <el-icon><Delete /></el-icon>
-        <span>回收站</span>
+        <span>{{ t('回收站') }}</span>
         <small v-if="trashCount !== undefined" class="sidebar-nav-count">{{ trashCount }}</small>
       </RouterLink>
     </nav>
 
     <section class="sidebar-categories">
       <div class="sidebar-categories-heading">
-        <span>分类</span>
+        <span>{{ t('分类') }}</span>
         <RouterLink
           class="sidebar-categories-manage"
           :class="{ 'sidebar-categories-manage--active': isActive('categories') }"
@@ -169,14 +160,14 @@ function flattenCategories(categories: CategoryNode[]): CategoryNode[] {
           }"
           :to="{ name: 'workbench', query: { category: UNCATEGORIZED_CATEGORY_ID } }"
           draggable="false"
-          title="未分类"
+          :title="t('未分类')"
           @dragenter="dragOverCategory($event, UNCATEGORIZED_CATEGORY_ID)"
           @dragover="dragOverCategory($event, UNCATEGORIZED_CATEGORY_ID)"
           @dragleave="leaveCategory"
           @drop.stop="dropNote($event)"
         >
           <el-icon><Folder /></el-icon>
-          <span class="sidebar-category-name">未分类</span>
+          <span class="sidebar-category-name">{{ t('未分类') }}</span>
         </RouterLink>
         <div
           v-for="category in visibleCategories"
@@ -205,8 +196,8 @@ function flattenCategories(categories: CategoryNode[]): CategoryNode[] {
             class="sidebar-category-create"
             :icon="Plus"
             text
-            :aria-label="`在${category.name}下新建笔记`"
-            :title="`在${category.name}下新建笔记`"
+            :aria-label="t('在{value1}下新建笔记', { value1: category.name })"
+            :title="t('在{value1}下新建笔记', { value1: category.name })"
             @click="emit('create', category.id)"
           />
         </div>
@@ -219,7 +210,7 @@ function flattenCategories(categories: CategoryNode[]): CategoryNode[] {
       to="/settings"
     >
       <el-icon><Setting /></el-icon>
-      <span>设置</span>
+      <span>{{ t('设置') }}</span>
     </RouterLink>
   </div>
 </template>
@@ -271,6 +262,14 @@ function flattenCategories(categories: CategoryNode[]): CategoryNode[] {
   block-size: 36px;
   font-size: 0.8125rem;
   font-weight: 600;
+}
+
+.sidebar-create-shortcut {
+  margin-inline-start: 12px;
+  font-family: inherit;
+  font-size: 0.6875rem;
+  font-weight: 400;
+  opacity: 0.8;
 }
 
 .sidebar-nav {

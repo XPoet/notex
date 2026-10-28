@@ -20,7 +20,9 @@ describe('发布工作流的原生脚本入口', () => {
     expect(workflow).toContain("github.event.head_commit.author.name == 'github-actions[bot]'")
     expect(workflow).toContain("startsWith(github.event.head_commit.message, 'chore(release): v')")
     expect(workflow).toContain('ref: ${{ github.sha }}')
-    expect(workflow).toContain('run: pnpm check:frontend')
+    expect(workflow).toContain(
+      '          pnpm format:check\n          pnpm lint\n          pnpm test\n',
+    )
   })
 
   it('仅构建 Windows x64 和 macOS Apple Silicon 安装包', () => {

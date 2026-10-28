@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { Folder } from '@element-plus/icons-vue'
 
 defineProps<{
@@ -13,16 +14,11 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <button
-    class="export-directory-picker"
-    type="button"
-    :disabled="isChoosing || disabled"
-    @click="emit('choose')"
-  >
+  <button class="export-directory-picker" type="button" :disabled="isChoosing || disabled" @click="emit('choose')">
     <el-icon class="export-directory-picker-icon"><Folder /></el-icon>
-    <span class="export-directory-picker-path">{{ directory ?? '尚未选择导出目录' }}</span>
+    <span class="export-directory-picker-path">{{ directory ?? t('尚未选择导出目录') }}</span>
     <span class="export-directory-picker-action">
-      {{ isChoosing ? '正在打开…' : '选择…' }}
+      {{ isChoosing ? t('正在打开…') : t('选择…') }}
     </span>
   </button>
 </template>

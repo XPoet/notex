@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '@/i18n'
 import { computed, onMounted, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSearchQuery } from '@/composables/useSearchQuery'
@@ -69,21 +70,19 @@ onMounted(() => {
 
 <template>
   <ManagementLayout
-    title="全局搜索"
+    :title="t('全局搜索')"
     :description="
-      searchStore.total > 0 ? `找到 ${searchStore.total} 篇所属笔记` : '搜索标题、正文、分类和标签'
+      searchStore.total > 0
+        ? t('找到 {value1} 篇所属笔记', { value1: searchStore.total })
+        : t('搜索标题、正文、分类和标签')
     "
     :categories="categoriesStore.categories"
     :tag-count="tagsStore.tags.length"
     @create="createNote"
   >
     <section class="search-view">
-      <SearchInput
-        :model-value="inputValue"
-        @update:model-value="updateQuery"
-        @clear="updateQuery('')"
-      />
-      <p class="search-tip">多个以空格分隔的关键词会同时匹配；回收站内容不会出现在结果中。</p>
+      <SearchInput :model-value="inputValue" @update:model-value="updateQuery" @clear="updateQuery('')" />
+      <p class="search-tip">{{ t('多个以空格分隔的关键词会同时匹配；回收站内容不会出现在结果中。') }}</p>
       <SearchResultList
         :query="searchStore.query"
         :results="searchStore.results"

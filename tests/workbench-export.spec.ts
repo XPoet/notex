@@ -37,6 +37,7 @@ async function mountWorkbench(query: Record<string, string> = {}) {
   const pinia = createPinia()
   useSettingsStore(pinia).snapshot = {
     theme: 'system',
+    language: 'zh-CN',
     noteSort: 'updatedAt',
     editorFontSize: 15,
     showCategoryCounts: true,

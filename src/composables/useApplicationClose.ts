@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { onBeforeUnmount, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { exitApplication, onExitRequested } from '@/services/window'
@@ -19,7 +20,7 @@ export function useApplicationClose(): void {
       await exitApplication()
     } catch {
       closing = false
-      ElMessage.error('无法完成关闭，请检查笔记保存状态后重试。')
+      ElMessage.error(t('无法完成关闭，请检查笔记保存状态后重试。'))
     }
   }
 

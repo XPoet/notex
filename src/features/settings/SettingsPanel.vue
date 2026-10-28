@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { t, locale } from '@/i18n'
 import { FolderOpened, Setting } from '@element-plus/icons-vue'
 import { computed } from 'vue'
 import type { NoteSort, SettingsSnapshot, ThemePreference } from '@/types/settings'
+import type { AppLanguage } from '@/i18n/locale'
 
 const props = defineProps<{
   settings?: SettingsSnapshot
@@ -12,6 +14,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   update: [
     request: {
+      language?: AppLanguage
       theme?: ThemePreference
       noteSort?: NoteSort
       editorFontSize?: 14 | 15 | 16 | 17 | 18
@@ -24,6 +27,10 @@ const emit = defineEmits<{
 const theme = computed({
   get: () => props.settings?.theme ?? 'system',
   set: (value: ThemePreference) => emit('update', { theme: value }),
+})
+const language = computed({
+  get: () => props.settings?.language ?? locale.value,
+  set: (value: AppLanguage) => emit('update', { language: value }),
 })
 const noteSort = computed({
   get: () => props.settings?.noteSort ?? 'updatedAt',
@@ -50,68 +57,77 @@ function isEditorFontSize(value: number): value is 14 | 15 | 16 | 17 | 18 {
     <article class="settings-group">
       <header>
         <div>
-          <h2>外观与编辑</h2>
-          <p>设置会立即应用，并在下次启动时恢复。</p>
+          <h2>{{ t('外观与编辑') }}</h2>
+          <p>{{ t('设置会立即应用，并在下次启动时恢复。') }}</p>
         </div>
       </header>
-      <label class="settings-row"
-        ><span><strong>主题</strong><small>选择界面颜色模式。</small></span>
-        <el-select v-model="theme" :disabled="isSaving">
-          <el-option label="跟随系统" value="system" />
-          <el-option label="浅色" value="light" />
-          <el-option label="深色" value="dark" />
-        </el-select>
-      </label>
       <label class="settings-row">
-        <span><strong>默认排序</strong><small>置顶笔记始终优先显示。</small></span>
-        <el-select v-model="noteSort" :disabled="isSaving">
-          <el-option label="最近编辑" value="updatedAt" />
-          <el-option label="创建时间" value="createdAt" />
-          <el-option label="标题" value="title" />
-        </el-select>
-      </label>
-      <label class="settings-row">
-        <span><strong>编辑器字体大小</strong><small>仅影响 Markdown 源码编辑区。</small></span>
-        <el-select
-          :model-value="editorFontSize"
-          :disabled="isSaving"
-          @update:model-value="updateEditorFontSize"
+        <span
+          ><strong>{{ t('界面语言') }}</strong
+          ><small>{{ t('默认选择系统语种，无法匹配时使用英语。') }}</small></span
         >
-          <el-option
-            v-for="size in [14, 15, 16, 17, 18]"
-            :key="size"
-            :label="`${size} px`"
-            :value="size"
-          />
+        <el-select v-model="language" :disabled="isSaving" :aria-label="t('界面语言')">
+          <el-option label="简体中文" value="zh-CN" />
+          <el-option label="繁體中文" value="zh-TW" />
+          <el-option label="English" value="en" />
+        </el-select>
+      </label>
+      <label class="settings-row"
+        ><span
+          ><strong>{{ t('主题') }}</strong
+          ><small>{{ t('选择界面颜色模式。') }}</small></span
+        >
+        <el-select v-model="theme" :disabled="isSaving">
+          <el-option :label="t('跟随系统')" value="system" />
+          <el-option :label="t('浅色')" value="light" />
+          <el-option :label="t('深色')" value="dark" />
+        </el-select>
+      </label>
+      <label class="settings-row">
+        <span
+          ><strong>{{ t('默认排序') }}</strong
+          ><small>{{ t('置顶笔记始终优先显示。') }}</small></span
+        >
+        <el-select v-model="noteSort" :disabled="isSaving">
+          <el-option :label="t('最近编辑')" value="updatedAt" />
+          <el-option :label="t('创建时间')" value="createdAt" />
+          <el-option :label="t('标题')" value="title" />
+        </el-select>
+      </label>
+      <label class="settings-row">
+        <span
+          ><strong>{{ t('编辑器字体大小') }}</strong
+          ><small>{{ t('仅影响 Markdown 源码编辑区。') }}</small></span
+        >
+        <el-select :model-value="editorFontSize" :disabled="isSaving" @update:model-value="updateEditorFontSize">
+          <el-option v-for="size in [14, 15, 16, 17, 18]" :key="size" :label="`${size} px`" :value="size" />
         </el-select>
       </label>
     </article>
 
+    <slot name="security" />
+
     <article class="settings-group">
       <header>
         <div>
-          <h2>本地目录与导出</h2>
-          <p>数据目录固定由系统管理，不能修改或迁移。</p>
+          <h2>{{ t('本地目录与导出') }}</h2>
+          <p>{{ t('数据目录固定由系统管理，不能修改或迁移。') }}</p>
         </div>
       </header>
       <div class="settings-row">
         <span>
-          <strong>当前数据目录</strong>
-          <small>{{ settings?.dataDirectory ?? '正在读取数据目录。' }}</small>
+          <strong>{{ t('当前数据目录') }}</strong>
+          <small>{{ settings?.dataDirectory ?? t('正在读取数据目录。') }}</small>
         </span>
-        <el-button :loading="isOpeningDirectory" @click="emit('openDataDirectory')">
-          打开数据目录
-        </el-button>
+        <el-button :loading="isOpeningDirectory" @click="emit('openDataDirectory')">{{ t('打开数据目录') }}</el-button>
       </div>
       <div class="settings-row">
         <span>
-          <strong>默认导出目录</strong>
-          <small>{{ settings?.defaultExportDirectory ?? '正在读取默认导出目录。' }}</small>
+          <strong>{{ t('默认导出目录') }}</strong>
+          <small>{{ settings?.defaultExportDirectory ?? t('正在读取默认导出目录。') }}</small>
         </span>
         <div class="settings-actions">
-          <el-button :disabled="isSaving" @click="emit('chooseDefaultExportDirectory')">
-            选择目录
-          </el-button>
+          <el-button :disabled="isSaving" @click="emit('chooseDefaultExportDirectory')">{{ t('选择目录') }}</el-button>
         </div>
       </div>
     </article>
@@ -119,16 +135,18 @@ function isEditorFontSize(value: number): value is 14 | 15 | 16 | 17 | 18 {
     <article class="settings-group settings-group--about">
       <header>
         <div>
-          <h2>关于 NoteX</h2>
-          <p>所有数据仅保存在此设备。</p>
+          <h2>{{ t('关于 NoteX') }}</h2>
+          <p>{{ t('所有数据仅保存在此设备。') }}</p>
         </div>
       </header>
       <div class="settings-row">
-        <span><strong>应用版本</strong></span
+        <span
+          ><strong>{{ t('应用版本') }}</strong></span
         ><code>{{ settings?.appVersion ?? '—' }}</code>
       </div>
       <div class="settings-row">
-        <span><strong>本地数据结构版本</strong></span
+        <span
+          ><strong>{{ t('本地数据结构版本') }}</strong></span
         ><code>V{{ settings?.schemaVersion ?? '—' }}</code>
       </div>
     </article>

@@ -1,9 +1,11 @@
 import { defineStore } from 'pinia'
 import { shallowRef } from 'vue'
+import { applyLanguage } from '@/i18n'
 import { getSettings, saveSettings, toSettingsError } from '@/services/settings'
 import type { SaveSettingsRequest, SettingsError, SettingsSnapshot } from '@/types/settings'
 
-function applyAppearance(settings: SettingsSnapshot): void {
+function applyPreferences(settings: SettingsSnapshot): void {
+  applyLanguage(settings.language ?? null)
   const root = document.documentElement
   root.dataset.theme = settings.theme
   root.classList.toggle('dark', settings.theme === 'dark' || isSystemDark(settings.theme))
@@ -30,7 +32,7 @@ export const useSettingsStore = defineStore('settings', () => {
     if (systemThemeQuery !== undefined || typeof window.matchMedia !== 'function') return
     systemThemeQuery = window.matchMedia('(prefers-color-scheme: dark)')
     systemThemeQuery.addEventListener('change', () => {
-      if (snapshot.value?.theme === 'system') applyAppearance(snapshot.value)
+      if (snapshot.value?.theme === 'system') applyPreferences(snapshot.value)
     })
   }
 
@@ -43,7 +45,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadingTask = getSettings()
       .then((settings) => {
         snapshot.value = settings
-        applyAppearance(settings)
+        applyPreferences(settings)
         observeSystemTheme()
       })
       .catch((failure: unknown) => {
@@ -62,7 +64,7 @@ export const useSettingsStore = defineStore('settings', () => {
     error.value = undefined
     try {
       snapshot.value = await saveSettings(request)
-      applyAppearance(snapshot.value)
+      applyPreferences(snapshot.value)
     } catch (failure: unknown) {
       error.value = toSettingsError(failure)
       throw error.value

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t, localizeMessage } from '@/i18n'
 import { Search } from '@element-plus/icons-vue'
 import SearchResultItem from './SearchResultItem.vue'
 import type { SearchResult } from '@/types/search'
@@ -23,22 +24,22 @@ const emit = defineEmits<{
 
 <template>
   <section class="search-results" aria-live="polite">
-    <p v-if="loading" class="search-state">正在搜索本地笔记…</p>
+    <p v-if="loading" class="search-state">{{ t('正在搜索本地笔记…') }}</p>
     <div v-else-if="error" class="search-state search-state--error" role="alert">
-      <p>{{ error }}</p>
+      <p>{{ localizeMessage(error) }}</p>
       <div class="search-state-actions">
-        <el-button :loading="rebuilding" @click="emit('rebuild')">重建索引</el-button>
-        <el-button type="primary" @click="emit('retry')">重试</el-button>
+        <el-button :loading="rebuilding" @click="emit('rebuild')">{{ t('重建索引') }}</el-button>
+        <el-button type="primary" @click="emit('retry')">{{ t('重试') }}</el-button>
       </div>
     </div>
     <div v-else-if="query === ''" class="search-state">
       <el-icon><Search /></el-icon>
-      <p>输入关键词，即可在标题、正文、分类和标签中查找笔记。</p>
+      <p>{{ t('输入关键词，即可在标题、正文、分类和标签中查找笔记。') }}</p>
     </div>
     <div v-else-if="results.length === 0" class="search-state">
       <el-icon><Search /></el-icon>
-      <p>暂无搜索结果</p>
-      <small>可尝试缩短关键词，或检查笔记是否已移入回收站。</small>
+      <p>{{ t('暂无搜索结果') }}</p>
+      <small>{{ t('可尝试缩短关键词，或检查笔记是否已移入回收站。') }}</small>
     </div>
     <template v-else>
       <SearchResultItem
@@ -49,7 +50,7 @@ const emit = defineEmits<{
         @open="emit('open', $event)"
       />
       <div v-if="hasNextPage" class="search-more">
-        <el-button :loading="loadingMore" @click="emit('loadMore')">加载更多</el-button>
+        <el-button :loading="loadingMore" @click="emit('loadMore')">{{ t('加载更多') }}</el-button>
       </div>
     </template>
   </section>

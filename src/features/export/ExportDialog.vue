@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t, localizeMessage } from '@/i18n'
 import { InfoFilled } from '@element-plus/icons-vue'
 import { computed, shallowRef, watch } from 'vue'
 import ExportDirectoryPicker from './ExportDirectoryPicker.vue'
@@ -20,15 +21,9 @@ const emit = defineEmits<{
 const exportStore = useExportStore()
 const settingsStore = useSettingsStore()
 const selectedScope = shallowRef<ExportScope>()
-const canClose = computed(
-  () => exportStore.status !== 'exporting' && exportStore.status !== 'choosing',
-)
-const isConfigLocked = computed(
-  () => exportStore.status === 'exporting' || exportStore.status === 'choosing',
-)
-const canStart = computed(
-  () => selectedScope.value !== undefined && exportStore.targetDirectory !== undefined,
-)
+const canClose = computed(() => exportStore.status !== 'exporting' && exportStore.status !== 'choosing')
+const isConfigLocked = computed(() => exportStore.status === 'exporting' || exportStore.status === 'choosing')
+const canStart = computed(() => selectedScope.value !== undefined && exportStore.targetDirectory !== undefined)
 
 watch(
   () => props.modelValue,
@@ -84,7 +79,7 @@ function chooseDirectory(): void {
 <template>
   <el-dialog
     :model-value="modelValue"
-    title="导出 Markdown"
+    :title="t('导出 Markdown')"
     class="export-dialog"
     width="min(1024px, calc(100vw - 32px))"
     :close-on-click-modal="canClose"
@@ -93,17 +88,15 @@ function chooseDirectory(): void {
     @update:model-value="close"
   >
     <div class="export-dialog-content">
-      <section class="export-config" aria-label="导出配置">
+      <section class="export-config" :aria-label="t('导出配置')">
         <div class="export-section">
-          <h2 class="export-section-title">导出范围</h2>
+          <h2 class="export-section-title">{{ t('导出范围') }}</h2>
           <div class="export-scope-list">
             <ExportScopeOption
               v-for="option in scopeOptions"
               :key="`${option.scope.kind}:${option.scope.id}`"
               :option="option"
-              :selected="
-                selectedScope?.kind === option.scope.kind && selectedScope.id === option.scope.id
-              "
+              :selected="selectedScope?.kind === option.scope.kind && selectedScope.id === option.scope.id"
               :disabled="isConfigLocked"
               @select="selectScope"
             />
@@ -111,7 +104,7 @@ function chooseDirectory(): void {
         </div>
 
         <div class="export-section">
-          <h2 class="export-section-title">导出目录</h2>
+          <h2 class="export-section-title">{{ t('导出目录') }}</h2>
           <ExportDirectoryPicker
             :directory="exportStore.targetDirectory"
             :is-choosing="exportStore.status === 'choosing'"
@@ -119,14 +112,14 @@ function chooseDirectory(): void {
             @choose="chooseDirectory"
           />
           <p class="export-directory-notice" role="note">
-            <el-icon><InfoFilled /></el-icon>
-            所有图片统一写入导出目录根目录下的 assets 文件夹，Markdown 使用相对路径引用。
+            <el-icon><InfoFilled /></el-icon
+            >{{ t('所有图片统一写入导出目录根目录下的 assets 文件夹，Markdown 使用相对路径引用。') }}
           </p>
         </div>
       </section>
 
-      <aside class="export-feedback" aria-label="导出状态反馈">
-        <h2 class="export-section-title">状态反馈</h2>
+      <aside class="export-feedback" :aria-label="t('导出状态反馈')">
+        <h2 class="export-section-title">{{ t('状态反馈') }}</h2>
         <ExportStatusPanel
           :status="exportStore.status"
           :progress="exportStore.progress"
@@ -137,18 +130,11 @@ function chooseDirectory(): void {
           @open-directory="exportStore.openDirectory"
         />
 
-        <el-scrollbar
-          v-if="exportStore.result?.issues.length"
-          class="export-issues"
-          max-height="180px"
-        >
+        <el-scrollbar v-if="exportStore.result?.issues.length" class="export-issues" max-height="180px">
           <ul class="export-issues-list">
-            <li
-              v-for="issue in exportStore.result.issues"
-              :key="`${issue.code}:${issue.noteId ?? issue.title}`"
-            >
+            <li v-for="issue in exportStore.result.issues" :key="`${issue.code}:${issue.noteId ?? issue.title}`">
               <strong>{{ issue.title }}</strong
-              >：{{ issue.message }}
+              >：{{ localizeMessage(issue.message) }}
             </li>
           </ul>
         </el-scrollbar>
@@ -160,20 +146,19 @@ function chooseDirectory(): void {
         v-if="exportStore.status === 'exporting'"
         :loading="exportStore.isCancelling"
         @click="exportStore.cancel"
+        >{{ t('取消导出') }}</el-button
       >
-        取消导出
-      </el-button>
       <template v-else-if="exportStore.status === 'completed'">
-        <el-button type="primary" @click="close">完成</el-button>
+        <el-button type="primary" @click="close">{{ t('完成') }}</el-button>
       </template>
       <template v-else-if="exportStore.status === 'failed'">
-        <el-button @click="close">关闭</el-button>
+        <el-button @click="close">{{ t('关闭') }}</el-button>
       </template>
       <template v-else>
-        <el-button @click="close">取消</el-button>
-        <el-button type="primary" :disabled="!canStart || isConfigLocked" @click="startExport">
-          开始导出
-        </el-button>
+        <el-button @click="close">{{ t('取消') }}</el-button>
+        <el-button type="primary" :disabled="!canStart || isConfigLocked" @click="startExport">{{
+          t('开始导出')
+        }}</el-button>
       </template>
     </template>
   </el-dialog>

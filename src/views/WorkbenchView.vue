@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t, localizeMessage } from '@/i18n'
 import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -43,13 +44,13 @@ const exportScopeOptions = computed<ExportScopeOption[]>(() => {
   return [
     {
       scope: { kind: 'note', id: note.id },
-      title: '当前笔记',
-      description: '导出当前笔记及其关联的原格式图片。',
+      title: t('当前笔记'),
+      description: t('导出当前笔记及其关联的原格式图片。'),
     },
     {
       scope: { kind: 'category', id: note.categoryId ?? UNCATEGORIZED_CATEGORY_ID },
-      title: '当前分类',
-      description: '导出当前笔记所属分类的全部直属笔记，不含子分类。',
+      title: t('当前分类'),
+      description: t('导出当前笔记所属分类的全部直属笔记，不含子分类。'),
     },
   ]
 })
@@ -59,7 +60,7 @@ const activeCategoryName = computed(() => {
     return undefined
   }
   if (categoryId === UNCATEGORIZED_CATEGORY_ID) {
-    return '未分类'
+    return t('未分类')
   }
   return findCategoryName(categoriesStore.categories, categoryId)
 })
@@ -115,12 +116,7 @@ watch(
         return
       }
     }
-    if (
-      previous === undefined ||
-      category !== previous[0] ||
-      tags !== previous[1] ||
-      note !== previous[2]
-    ) {
+    if (previous === undefined || category !== previous[0] || tags !== previous[1] || note !== previous[2]) {
       await loadNotesForRoute(category, tags)
       if (typeof note === 'string' && notes.value.some((item) => item.id === note)) {
         await notesStore.selectNote(note)
@@ -164,13 +160,13 @@ function updateNote(change: Pick<NoteDetail, 'title' | 'content'>): void {
 async function saveImage(bytes: Uint8Array): Promise<string> {
   const note = selectedNote.value
   if (note === undefined) {
-    throw new Error('请先新建或选择一条笔记。')
+    throw new Error(t('请先新建或选择一条笔记。'))
   }
   try {
     const asset = await savePastedImage(note.id, bytes)
     imageError.value = undefined
     await refreshAssetHealth(note.id)
-    return `![图片](./${asset.relativePath})`
+    return t('![图片](./{value1})', { value1: asset.relativePath })
   } catch (failure: unknown) {
     const assetError = toAssetError(failure)
     imageError.value = assetError.message
@@ -202,9 +198,7 @@ async function loadNotesForRoute(category: unknown, tags: unknown): Promise<void
   const categoryId = typeof category === 'string' ? category : undefined
   const tagIds = typeof tags === 'string' ? tags.split(',').filter(Boolean) : []
   if (categoryId !== undefined) {
-    await notesStore.loadByCategory(
-      categoryId === UNCATEGORIZED_CATEGORY_ID ? undefined : categoryId,
-    )
+    await notesStore.loadByCategory(categoryId === UNCATEGORIZED_CATEGORY_ID ? undefined : categoryId)
     return
   }
   if (tagIds.length > 0) {
@@ -219,15 +213,11 @@ async function handleTrash(): Promise<void> {
   if (note === undefined) {
     return
   }
-  const shouldTrash = await ElMessageBox.confirm(
-    '笔记将移入回收站，之后可恢复。是否继续？',
-    '确认删除笔记',
-    {
-      confirmButtonText: '移入回收站',
-      cancelButtonText: '取消',
-      type: 'warning',
-    },
-  )
+  const shouldTrash = await ElMessageBox.confirm(t('笔记将移入回收站，之后可恢复。是否继续？'), t('确认删除笔记'), {
+    confirmButtonText: t('移入回收站'),
+    cancelButtonText: t('取消'),
+    type: 'warning',
+  })
     .then(() => true)
     .catch(() => false)
   if (!shouldTrash) {
@@ -235,7 +225,7 @@ async function handleTrash(): Promise<void> {
   }
   await autoSave.flush()
   await trashNote(note.id)
-  ElMessage.success('笔记已移入回收站。')
+  ElMessage.success(t('笔记已移入回收站。'))
   await notesStore.reloadAfterTrash(note.id)
   await categoriesStore.load()
 }
@@ -247,7 +237,7 @@ async function handleExport(): Promise<void> {
       isExportDialogVisible.value = true
     }
   } catch {
-    ElMessage.error('当前笔记保存失败，暂不能导出。')
+    ElMessage.error(t('当前笔记保存失败，暂不能导出。'))
   }
 }
 
@@ -266,11 +256,11 @@ async function handleMoveNote(noteId: string, categoryId: string | undefined): P
     await categoriesStore.load()
     const categoryName =
       categoryId === undefined
-        ? '未分类'
-        : (findCategoryName(categoriesStore.categories, categoryId) ?? '目标分类')
-    ElMessage.success(`笔记已移至“${categoryName}”。`)
+        ? t('未分类')
+        : (findCategoryName(categoriesStore.categories, categoryId) ?? t('目标分类'))
+    ElMessage.success(t('笔记已移至“{value1}”。', { value1: categoryName }))
   } catch (failure: unknown) {
-    ElMessage.error(notesStore.error?.message ?? toCategoryError(failure).message)
+    ElMessage.error(localizeMessage(notesStore.error?.message ?? toCategoryError(failure).message))
   } finally {
     isMovingNote.value = false
   }
@@ -333,9 +323,9 @@ async function handleTogglePin(): Promise<void> {
   if (note === undefined) return
   try {
     await notesStore.setPinned(!note.isPinned)
-    ElMessage.success(note.isPinned ? '已取消置顶。' : '笔记已置顶。')
+    ElMessage.success(note.isPinned ? t('已取消置顶。') : t('笔记已置顶。'))
   } catch {
-    ElMessage.error('无法更新置顶状态。')
+    ElMessage.error(t('无法更新置顶状态。'))
   }
 }
 
@@ -394,7 +384,7 @@ onBeforeUnmount(() => {
         @retry="autoSave.flush().catch(() => undefined)"
         @paste-error="imageError = $event"
       />
-      <p v-if="imageError" class="image-error" role="alert">{{ imageError }}</p>
+      <p v-if="imageError" class="image-error" role="alert">{{ localizeMessage(imageError) }}</p>
     </template>
   </WorkspaceLayout>
   <ExportDialog v-model="isExportDialogVisible" :scope-options="exportScopeOptions" />

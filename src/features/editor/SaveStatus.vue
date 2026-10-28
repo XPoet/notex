@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t, localizeMessage } from '@/i18n'
 import { computed } from 'vue'
 import type { SaveStatus as SaveStatusType } from '@/stores/notes'
 
@@ -8,10 +9,10 @@ const props = defineProps<{
 }>()
 
 const label = computed(() => {
-  if (props.status === 'saving') return '保存中…'
-  if (props.status === 'saved') return '已保存'
-  if (props.status === 'failed') return props.message ?? '保存失败，请重试'
-  return '正在编辑'
+  if (props.status === 'saving') return t('保存中…')
+  if (props.status === 'saved') return t('已保存')
+  if (props.status === 'failed') return localizeMessage(props.message) ?? t('保存失败，请重试')
+  return t('正在编辑')
 })
 </script>
 
