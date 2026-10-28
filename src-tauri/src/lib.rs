@@ -36,6 +36,7 @@ pub fn run() -> Result<(), tauri::Error> {
             commands::bootstrap::show_main_window,
             commands::bootstrap::exit_application,
             commands::notes::create_note,
+            commands::imports::import_note,
             commands::notes::list_notes,
             commands::notes::get_note,
             commands::notes::save_note,

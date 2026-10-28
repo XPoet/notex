@@ -91,14 +91,14 @@ impl NotesService {
     }
 }
 
-fn validate_note(title: &str, content: &str) -> Result<(), NoteError> {
+pub(super) fn validate_note(title: &str, content: &str) -> Result<(), NoteError> {
     if title.chars().count() > MAX_TITLE_LENGTH || content.chars().count() > MAX_CONTENT_LENGTH {
         return Err(NoteError::ValidationFailed);
     }
     Ok(())
 }
 
-fn current_time() -> Result<String, NoteError> {
+pub(super) fn current_time() -> Result<String, NoteError> {
     OffsetDateTime::now_utc()
         .format(&Rfc3339)
         .map_err(|_| NoteError::SaveFailed)

@@ -280,3 +280,21 @@ Rust 必须根据字节文件头识别 PNG、JPEG、WebP 或 GIF，并以受限�
 ### 导出错误码
 
 `EXPORT_VALIDATION_FAILED` ｜ `EXPORT_SCOPE_NOT_FOUND` ｜ `EXPORT_TARGET_UNAVAILABLE` ｜ `EXPORT_SNAPSHOT_FAILED` ｜ `EXPORT_WRITE_FAILED` ｜ `EXPORT_PROGRESS_UNAVAILABLE` ｜ `EXPORT_TASK_NOT_FOUND` ｜ `EXPORT_OPEN_FAILED`
+
+## 13. 笔记导入接口
+
+### `import_note`
+
+请求：`{ fileName: string, bytes: number[] }`。成功返回完整 `NoteDetail`。
+
+导入页 `/imports` 复用管理页布局，支持文件选择和拖入、多文件清单、逐篇进度、成功后查看以及失败项重试。每批最多 100 个文件，由前端串行调用；单篇失败不阻断后续文件，重试只处理失败项，已成功项不会重复导入。切换页面会保留当前会话清单；重启后不保留清单。
+
+文件由用户通过浏览器文件选择控件或拖入显式提供。前端 Service 读取原始字节，不能传入本机路径，Rust 也不读取前端指定的外部文件。无需新增文件系统权限或 Capability。前后端均限制单文件不超过 10 MiB，Rust 重新校验文件名不含路径分隔符和控制字符、扩展名为 `.md` 或 `.txt`（忽略大小写），不信任 MIME 类型。
+
+Rust 支持 UTF-8（含可选 BOM）以及带 BOM 的 UTF-16 LE / BE，严格拒绝无效编码、NUL 和非文本控制字符，不以替换字符静默修复。其他编码需先转换。正文保留原有文本与换行；不解析 Markdown 标题、分类或标签，也不读取 Markdown 引用的图片或其他文件。
+
+笔记名使用去掉最后一个扩展名的文件名，不得为空白，沿用笔记的 4,000 字符标题和 4,000,000 字符正文限制。每次调用生成新 UUID，允许同名笔记；分类固定为 `NULL`（未分类），不置顶。Command 在阻塞线程委托 Import Service 校验与解码，再由 Notes Repository 在同一事务内插入完整笔记和搜索索引；失败时不留下空白或部分笔记。整个流程不修改源文件，不需要数据库结构变更。
+
+### 导入错误码
+
+`IMPORT_VALIDATION_FAILED` ｜ `IMPORT_UNSUPPORTED_FORMAT` ｜ `IMPORT_FILE_TOO_LARGE` ｜ `IMPORT_INVALID_ENCODING` ｜ `IMPORT_SAVE_FAILED`。前端文件读取失败使用 `IMPORT_READ_FAILED`。界面仅展示安全提示，不显示路径、正文或系统原始错误。

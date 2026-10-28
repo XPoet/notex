@@ -8,6 +8,7 @@ import {
   PriceTag,
   Search,
   Setting,
+  Upload,
 } from '@element-plus/icons-vue'
 import { computed, shallowRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
@@ -74,7 +75,7 @@ const activeCategoryId = computed(() =>
 )
 const visibleCategories = computed(() => flattenCategories(props.categories))
 function isActive(
-  name: 'workbench' | 'categories' | 'tags' | 'trash' | 'search' | 'settings',
+  name: 'workbench' | 'categories' | 'tags' | 'trash' | 'search' | 'imports' | 'settings',
 ): boolean {
   if (name === 'workbench') {
     return activeRouteName.value === name && activeCategoryId.value === undefined
@@ -137,6 +138,15 @@ function flattenCategories(categories: CategoryNode[]): CategoryNode[] {
       >
         <el-icon><PriceTag /></el-icon>
         <span>标签</span>
+      </RouterLink>
+      <RouterLink
+        class="sidebar-nav-item"
+        :class="{ 'sidebar-nav-item--active': isActive('imports') }"
+        to="/imports"
+        title="导入笔记"
+      >
+        <el-icon><Upload /></el-icon>
+        <span>导入笔记</span>
       </RouterLink>
       <RouterLink
         class="sidebar-nav-item"

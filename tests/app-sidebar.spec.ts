@@ -33,6 +33,7 @@ function createTestRouter() {
       { path: '/tags', name: 'tags', component: EmptyView },
       { path: '/trash', name: 'trash', component: EmptyView },
       { path: '/search', name: 'search', component: EmptyView },
+      { path: '/imports', name: 'imports', component: EmptyView },
       { path: '/settings', name: 'settings', component: EmptyView },
     ],
   })
@@ -73,6 +74,7 @@ describe('AppSidebar', () => {
     expect(hrefs).toContain(router.resolve({ name: 'tags' }).href)
     expect(hrefs).toContain(router.resolve({ name: 'trash' }).href)
     expect(hrefs).toContain(router.resolve({ name: 'search' }).href)
+    expect(hrefs).toContain(router.resolve({ name: 'imports' }).href)
     expect(hrefs).toContain(router.resolve({ name: 'settings' }).href)
     expect(hrefs).toContain(router.resolve({ name: 'workbench', query: { category: 'work' } }).href)
     expect(hrefs).toContain(
@@ -122,6 +124,19 @@ describe('AppSidebar', () => {
     await wrapper.get('.sidebar-create-button').trigger('click')
 
     expect(wrapper.emitted('create')).toHaveLength(1)
+  })
+
+  it('导入笔记入口显示当前页面的激活状态', async () => {
+    const router = createTestRouter()
+    await router.push('/imports')
+    await router.isReady()
+    const wrapper = mount(AppSidebar, {
+      props: { categories: [] },
+      global: { plugins: [router], stubs: { ElButton: ButtonStub, ElIcon: IconStub } },
+    })
+    const link = wrapper.get('a[href="/imports"]')
+    expect(link.text()).toBe('导入笔记')
+    expect(link.classes()).toContain('sidebar-nav-item--active')
   })
 
   it('分类不再显示笔记数量，同时保留分类导航入口', async () => {
