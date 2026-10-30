@@ -26,7 +26,7 @@ describe('NoteList', () => {
       },
     })
 
-    expect(wrapper.get('.note-list-title').text()).toBe('工作项目笔记')
+    expect(wrapper.get('.note-list-title').text()).toBe('工作项目')
   })
 
   it('在大量笔记时只渲染当前可见窗口，滚动后更新窗口内容', async () => {

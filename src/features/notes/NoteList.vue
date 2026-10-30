@@ -45,9 +45,7 @@ const visibleRange = computed(() => {
   }
 })
 const renderedNotes = computed(() => visibleNotes.value.slice(visibleRange.value.start, visibleRange.value.end))
-const noteListTitle = computed(() =>
-  props.categoryName === undefined ? t('全部笔记') : t('{value1}笔记', { value1: props.categoryName }),
-)
+const noteListTitle = computed(() => (props.categoryName === undefined ? t('全部笔记') : props.categoryName))
 const virtualHeight = computed(() => visibleNotes.value.length * itemHeight)
 const virtualOffset = computed(() => visibleRange.value.start * itemHeight)
 
