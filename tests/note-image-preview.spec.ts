@@ -98,7 +98,7 @@ describe('笔记图片预览', () => {
     await flushPromises()
 
     expect(loadNoteImage).toHaveBeenCalledTimes(2)
-    expect(loadNoteImage).toHaveBeenCalledWith('note-1', 'assets/a.png')
+    expect(loadNoteImage).toHaveBeenCalledWith('note-1', 'assets/a.png', expect.objectContaining({ thumbnail: true }))
     expect(wrapper.findAll('.cm-content img')).toHaveLength(3)
     await wrapper.findAll('.cm-image-preview button')[1]?.trigger('click')
     const viewer = wrapper.findComponent(viewerStub)
@@ -107,7 +107,8 @@ describe('笔记图片预览', () => {
     await viewer.find('button').trigger('click')
     expect(wrapper.find('.image-viewer').exists()).toBe(false)
     wrapper.unmount()
-    expect(revokeObjectURL).toHaveBeenCalledTimes(2)
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:assets/a.png')
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:assets/b.gif')
   })
 
   it('正文新增图片后显示内嵌图片，普通文字编辑不重复读取，移除引用时释放资源', async () => {
@@ -120,6 +121,7 @@ describe('笔记图片预览', () => {
     expect(loadNoteImage).toHaveBeenCalledTimes(1)
     await wrapper.find('button').trigger('click')
     await wrapper.setProps({ modelValue: '移除引用' })
+    await flushPromises()
     expect(wrapper.find('.image-viewer').exists()).toBe(false)
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:assets/a.png')
     wrapper.unmount()
@@ -155,7 +157,11 @@ describe('笔记图片预览', () => {
     await wrapper.setProps({ noteId: 'note-2' })
     await flushPromises()
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:assets/a.png')
-    expect(loadNoteImage).toHaveBeenLastCalledWith('note-2', 'assets/a.png')
+    expect(loadNoteImage).toHaveBeenLastCalledWith(
+      'note-2',
+      'assets/a.png',
+      expect.objectContaining({ thumbnail: true }),
+    )
     wrapper.unmount()
   })
 
@@ -202,6 +208,55 @@ describe('笔记图片预览', () => {
     await wrapper.find('.cm-content').trigger('keydown', { key: 'z', ctrlKey: true, shiftKey: true })
     await flushPromises()
     expect(wrapper.find('.cm-image-preview img').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('只有打开大图时读取原图，关闭后释放原图 URL', async () => {
+    vi.mocked(loadNoteImage).mockImplementation(async (_noteId, path, options) =>
+      options?.thumbnail === true ? `blob:thumb:${path}` : `blob:original:${path}`,
+    )
+    const wrapper = mountEditor('![图片](./assets/a.png)')
+    await flushPromises()
+    expect(loadNoteImage).toHaveBeenCalledTimes(1)
+    await wrapper.find('.cm-image-preview button').trigger('click')
+    await flushPromises()
+    expect(loadNoteImage).toHaveBeenCalledTimes(2)
+    expect(wrapper.findComponent(viewerStub).props('urlList')).toEqual(['blob:original:assets/a.png'])
+    await wrapper.find('.image-viewer button').trigger('click')
+    await flushPromises()
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:original:assets/a.png')
+    expect(revokeObjectURL).not.toHaveBeenCalledWith('blob:thumb:assets/a.png')
+    wrapper.unmount()
+  })
+
+  it('跨行代码围栏改变后重新解析，隐藏围栏内图片并释放资源', async () => {
+    const wrapper = mountEditor('开头\n![图片](./assets/a.png)\n结尾')
+    await flushPromises()
+    await wrapper.setProps({ modelValue: '```markdown\n开头\n![图片](./assets/a.png)\n结尾\n```' })
+    await flushPromises()
+    expect(wrapper.find('.cm-image-preview').exists()).toBe(false)
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:assets/a.png')
+    wrapper.unmount()
+  })
+
+  it('关闭大图后丢弃迟到原图，不泄漏 URL', async () => {
+    let complete: ((url: string) => void) | undefined
+    vi.mocked(loadNoteImage).mockImplementation((_id, path, options) => {
+      if (options?.thumbnail === true) return Promise.resolve(`blob:thumb:${path}`)
+      return new Promise((resolve) => {
+        complete = resolve
+      })
+    })
+    const wrapper = mountEditor('![图片](./assets/a.png)')
+    await flushPromises()
+    await wrapper.find('.cm-image-preview button').trigger('click')
+    await flushPromises()
+    await wrapper.find('.image-viewer button').trigger('click')
+    await flushPromises()
+    complete?.('blob:late-original')
+    await flushPromises()
+    expect(wrapper.find('.image-viewer').exists()).toBe(false)
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:late-original')
     wrapper.unmount()
   })
 })

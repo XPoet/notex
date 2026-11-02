@@ -19,6 +19,7 @@ export const useSearchStore = defineStore('search', () => {
     requestVersion += 1
     const version = requestVersion
     query.value = normalized
+    isLoadingMore.value = false
     if (normalized === '') {
       resetResults()
       return
@@ -47,7 +48,7 @@ export const useSearchStore = defineStore('search', () => {
 
   async function loadNext(): Promise<void> {
     const offset = nextOffset.value
-    if (offset === null || query.value === '' || isLoadingMore.value) {
+    if (offset === null || query.value === '' || isLoading.value || isLoadingMore.value) {
       return
     }
     const version = requestVersion

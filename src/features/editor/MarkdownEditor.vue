@@ -4,9 +4,10 @@ import { EditorView, keymap } from '@codemirror/view'
 import { onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef, watch } from 'vue'
 import { useClipboardPaste } from './useClipboardPaste'
 import NoteImageViewer from './NoteImageViewer.vue'
-import { imagePreviews, refreshImagePreviews } from './imagePreviews'
+import { imagePreviews, refreshImagePreviews, replaceImageReferences } from './imagePreviews'
+import { EditHistory } from './editHistory'
 import { searchHighlights } from './searchHighlights'
-import { useNoteImages } from '@/composables/useNoteImages'
+import { getNoteImageReferences, useNoteImages } from '@/composables/useNoteImages'
 import { locale } from '@/i18n'
 
 const props = defineProps<{
@@ -24,16 +25,65 @@ const emit = defineEmits<{
 const editorHost = useTemplateRef<HTMLDivElement>('editorHost')
 const editorView = shallowRef<EditorView>()
 const editorContent = ref(props.modelValue)
+const imageReferences = shallowRef(getNoteImageReferences(props.modelValue))
+const visibleImagePaths = shallowRef<readonly string[]>([])
 const searchHighlightCompartment = new Compartment()
-const { images } = useNoteImages(
+const { images, loadOriginal } = useNoteImages(
   () => props.noteId,
-  () => editorContent.value,
+  () => imageReferences.value,
+  { visiblePaths: () => visibleImagePaths.value },
 )
 const previewPath = ref<string>()
 let synchronizing = false
 let applyingHistory = false
-const undoStack: string[] = []
-const redoStack: string[] = []
+const history = new EditHistory()
+let referenceTimer: ReturnType<typeof setTimeout> | undefined
+let referenceRefreshQueued = false
+let disposed = false
+
+const previewField = imagePreviews(
+  () => images.value,
+  () => imageReferences.value,
+  (path) => {
+    previewPath.value = path
+  },
+  (path) => {
+    const image = images.value.find((item) => item.relativePath === path)
+    if (image !== undefined) image.failed = true
+  },
+)
+
+function updateVisibleImages(view: EditorView): void {
+  const ranges = view.visibleRanges
+  const paths = view.state
+    .field(previewField)
+    .references.filter((reference) =>
+      ranges.some((range) => reference.to >= range.from - 1_200 && reference.from <= range.to + 1_200),
+    )
+    .map((reference) => reference.relativePath)
+  if (paths.join('\n') !== visibleImagePaths.value.join('\n')) visibleImagePaths.value = paths
+}
+
+function refreshReferences(): void {
+  referenceRefreshQueued = false
+  if (referenceTimer !== undefined) clearTimeout(referenceTimer)
+  referenceTimer = undefined
+  const view = editorView.value
+  if (disposed || view === undefined) return
+  imageReferences.value = getNoteImageReferences(editorContent.value)
+  view.dispatch({ effects: replaceImageReferences.of(imageReferences.value) })
+  updateVisibleImages(view)
+}
+
+function scheduleReferences(structuralChange: boolean): void {
+  if (structuralChange) {
+    if (referenceRefreshQueued) return
+    referenceRefreshQueued = true
+    queueMicrotask(refreshReferences)
+  } else if (referenceTimer === undefined && !referenceRefreshQueued) {
+    referenceTimer = setTimeout(refreshReferences, 160)
+  }
+}
 
 function insertText(text: string): void {
   const view = editorView.value
@@ -83,35 +133,23 @@ function focusEditorWhenClickingBlankArea(event: MouseEvent): void {
   view.focus()
 }
 
-function applyHistory(nextValue: string): void {
-  const view = editorView.value
-  if (view === undefined) {
-    return
-  }
-  applyingHistory = true
-  view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: nextValue } })
-  applyingHistory = false
-}
-
 function undo(): boolean {
-  const previousValue = undoStack.pop()
   const view = editorView.value
-  if (previousValue === undefined || view === undefined) {
-    return false
-  }
-  redoStack.push(view.state.doc.toString())
-  applyHistory(previousValue)
+  const change = history.undo()
+  if (change === undefined || view === undefined) return false
+  applyingHistory = true
+  view.dispatch(change)
+  applyingHistory = false
   return true
 }
 
 function redo(): boolean {
-  const nextValue = redoStack.pop()
   const view = editorView.value
-  if (nextValue === undefined || view === undefined) {
-    return false
-  }
-  undoStack.push(view.state.doc.toString())
-  applyHistory(nextValue)
+  const change = history.redo()
+  if (change === undefined || view === undefined) return false
+  applyingHistory = true
+  view.dispatch(change)
+  applyingHistory = false
   return true
 }
 
@@ -132,18 +170,13 @@ onMounted(() => {
       extensions: [
         EditorView.lineWrapping,
         searchHighlightCompartment.of(searchHighlights(props.searchQuery ?? '')),
-        imagePreviews(
-          () => images.value,
-          (path) => {
-            previewPath.value = path
-          },
-          (path) => {
-            const image = images.value.find((item) => item.relativePath === path)
-            if (image !== undefined) image.failed = true
-          },
-        ),
+        previewField,
         EditorView.domEventHandlers({
           paste: handlePasteEvent,
+          compositionstart: () => {
+            history.breakGroup()
+            return false
+          },
         }),
         keymap.of([
           {
@@ -164,14 +197,29 @@ onMounted(() => {
           },
         ]),
         EditorView.updateListener.of((update) => {
-          if (update.docChanged) editorContent.value = update.state.doc.toString()
-          if (update.docChanged && !synchronizing) {
-            if (!applyingHistory) {
-              undoStack.push(update.startState.doc.toString())
-              redoStack.length = 0
+          if (update.docChanged) {
+            // Keep v-model synchronous for save/navigation barriers; serialize
+            // once, then reuse this snapshot for deferred image parsing.
+            editorContent.value = update.state.doc.toString()
+            if (!synchronizing) {
+              if (!applyingHistory) update.transactions.forEach((transaction) => history.record(transaction))
+              emit('update:modelValue', editorContent.value)
             }
-            emit('update:modelValue', update.state.doc.toString())
+            let structuralChange = synchronizing || applyingHistory
+            update.changes.iterChanges((from, to, fromB, toB, inserted) => {
+              if (
+                toB - fromB > 1_000 ||
+                to - from > 1_000 ||
+                /[!`~\n[\]()]/.test(inserted.toString()) ||
+                /[!`~\n[\]()]/.test(update.startState.doc.sliceString(from, to))
+              )
+                structuralChange = true
+            })
+            scheduleReferences(structuralChange)
+          } else if (update.selectionSet) {
+            history.breakGroup()
           }
+          if (update.viewportChanged) updateVisibleImages(update.view)
         }),
       ],
     }),
@@ -179,16 +227,18 @@ onMounted(() => {
   })
   host.addEventListener('mousedown', focusEditorWhenClickingBlankArea)
   editorView.value = view
+  updateVisibleImages(view)
 })
 
 watch(
   () => props.modelValue,
   (value) => {
     const view = editorView.value
-    if (view === undefined || view.state.doc.toString() === value) {
+    if (view === undefined || editorContent.value === value) {
       return
     }
     synchronizing = true
+    history.clear()
     view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value } })
     synchronizing = false
   },
@@ -204,14 +254,18 @@ watch(
 )
 
 watch(
-  [images, locale],
+  images,
   () => {
     editorView.value?.dispatch({ effects: refreshImagePreviews.of(null) })
   },
   { deep: true },
 )
 
+watch(locale, refreshReferences)
+
 onBeforeUnmount(() => {
+  disposed = true
+  if (referenceTimer !== undefined) clearTimeout(referenceTimer)
   editorHost.value?.removeEventListener('mousedown', focusEditorWhenClickingBlankArea)
   editorView.value?.destroy()
 })
@@ -219,7 +273,12 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="editorHost" class="markdown-editor">
-    <NoteImageViewer :images="images" :preview-path="previewPath" @close="previewPath = undefined" />
+    <NoteImageViewer
+      :images="images"
+      :preview-path="previewPath"
+      :load-original="loadOriginal"
+      @close="previewPath = undefined"
+    />
   </div>
 </template>
 

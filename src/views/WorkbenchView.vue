@@ -6,6 +6,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { storeToRefs } from 'pinia'
 import { getNoteAssetHealth, savePastedImage, toAssetError } from '@/services/assets'
 import { useAutoSave } from '@/composables/useAutoSave'
+import { useSearchQuery } from '@/composables/useSearchQuery'
 import NoteEditor from '@/features/editor/NoteEditor.vue'
 import ExportDialog from '@/features/export/ExportDialog.vue'
 import NoteList from '@/features/notes/NoteList.vue'
@@ -35,7 +36,9 @@ const searchQuery = computed(
 const imageError = shallowRef<string>()
 const isExportDialogVisible = shallowRef(false)
 const isMovingNote = shallowRef(false)
+const isTrashingNote = shallowRef(false)
 const noteEditor = useTemplateRef<{ focusEditor: () => void }>('noteEditor')
+let routeVersion = 0
 const exportScopeOptions = computed<ExportScopeOption[]>(() => {
   const note = selectedNote.value
   if (note === undefined) {
@@ -85,6 +88,24 @@ function findCategoryName(categories: CategoryNode[], categoryId: string): strin
 const autoSave = useAutoSave(async () => {
   await notesStore.flush()
 })
+const listSearch = useSearchQuery(async (query) => notesStore.refreshList(query))
+const removeNavigationGuard = router.beforeEach(async (_to, from) => {
+  if (from.name !== 'workbench') return true
+  if (isTrashingNote.value) return false
+  try {
+    await autoSave.flush()
+    return true
+  } catch {
+    return false
+  }
+})
+
+function handleListSearch(query: string): void {
+  listSearchQuery.value = query
+  listSearch.cancel()
+  if (query.trim() === '') void notesStore.refreshList('')
+  else listSearch.schedule(query)
+}
 
 async function refreshAssetHealth(noteId: string | undefined): Promise<void> {
   if (noteId === undefined) {
@@ -92,9 +113,10 @@ async function refreshAssetHealth(noteId: string | undefined): Promise<void> {
     return
   }
   try {
-    missingAssetCount.value = (await getNoteAssetHealth(noteId)).missingAssetCount
+    const health = await getNoteAssetHealth(noteId)
+    if (selectedNote.value?.id === noteId) missingAssetCount.value = health.missingAssetCount
   } catch {
-    missingAssetCount.value = 0
+    if (selectedNote.value?.id === noteId) missingAssetCount.value = 0
   }
 }
 
@@ -109,18 +131,20 @@ watch(
 watch(
   () => [route.query.category, route.query.tags, route.query.note, route.query.create] as const,
   async ([category, tags, note, create], previous) => {
+    const version = ++routeVersion
     if (create === '1') {
       try {
         await autoSave.flush()
+        if (version !== routeVersion) return
       } catch {
         return
       }
     }
     if (previous === undefined || category !== previous[0] || tags !== previous[1] || note !== previous[2]) {
-      await loadNotesForRoute(category, tags)
-      if (typeof note === 'string' && notes.value.some((item) => item.id === note)) {
-        await notesStore.selectNote(note)
-      }
+      listSearch.cancel()
+      listSearchQuery.value = undefined
+      await loadNotesForRoute(category, tags, typeof note === 'string' ? note : undefined)
+      if (version !== routeVersion) return
     }
     if (create === '1' && (await handleCreate())) {
       const query = { ...route.query }
@@ -153,6 +177,7 @@ watch(
 )
 
 function updateNote(change: Pick<NoteDetail, 'title' | 'content'>): void {
+  if (isTrashingNote.value) return
   notesStore.updateDraft(change)
   autoSave.schedule()
 }
@@ -175,6 +200,7 @@ async function saveImage(bytes: Uint8Array): Promise<string> {
 }
 
 async function handleCreate(categoryId?: string): Promise<boolean> {
+  if (isTrashingNote.value) return false
   try {
     await autoSave.flush()
     if (categoryId !== undefined) {
@@ -194,21 +220,22 @@ async function handleLoad(): Promise<void> {
   await Promise.all([categoriesStore.load(), tagsStore.load()])
 }
 
-async function loadNotesForRoute(category: unknown, tags: unknown): Promise<void> {
+async function loadNotesForRoute(category: unknown, tags: unknown, selectedId?: string): Promise<void> {
   const categoryId = typeof category === 'string' ? category : undefined
   const tagIds = typeof tags === 'string' ? tags.split(',').filter(Boolean) : []
   if (categoryId !== undefined) {
-    await notesStore.loadByCategory(categoryId === UNCATEGORIZED_CATEGORY_ID ? undefined : categoryId)
+    await notesStore.loadByCategory(categoryId === UNCATEGORIZED_CATEGORY_ID ? undefined : categoryId, selectedId)
     return
   }
   if (tagIds.length > 0) {
-    await notesStore.loadByTags(tagIds)
+    await notesStore.loadByTags(tagIds, selectedId)
     return
   }
-  await notesStore.load()
+  await notesStore.load(selectedId)
 }
 
 async function handleTrash(): Promise<void> {
+  if (isTrashingNote.value) return
   const note = selectedNote.value
   if (note === undefined) {
     return
@@ -223,11 +250,18 @@ async function handleTrash(): Promise<void> {
   if (!shouldTrash) {
     return
   }
-  await autoSave.flush()
-  await trashNote(note.id)
-  ElMessage.success(t('笔记已移入回收站。'))
-  await notesStore.reloadAfterTrash(note.id)
-  await categoriesStore.load()
+  isTrashingNote.value = true
+  try {
+    await autoSave.flush()
+    await trashNote(note.id)
+    ElMessage.success(t('笔记已移入回收站。'))
+    await notesStore.reloadAfterTrash(note.id)
+    await categoriesStore.load()
+  } catch {
+    ElMessage.error(localizeMessage(notesStore.error?.message ?? t('无法读取笔记')))
+  } finally {
+    isTrashingNote.value = false
+  }
 }
 
 async function handleExport(): Promise<void> {
@@ -271,21 +305,26 @@ async function handleUpdateTags(tagIds: string[]): Promise<void> {
   if (note === undefined) return
   await autoSave.flush()
   await setNoteTags(note.id, tagIds)
-  selectedTagIds.value = tagIds
+  if (selectedNote.value?.id === note.id) selectedTagIds.value = tagIds
   await tagsStore.load()
+  await notesStore.refreshList()
 }
 
 async function handleCreateTag(name: string): Promise<void> {
+  const noteId = selectedNote.value?.id
   const tag = await createTag(name)
   await tagsStore.load()
+  if (selectedNote.value?.id !== noteId) return
   if (!selectedTagIds.value.includes(tag.id)) {
     await handleUpdateTags([...selectedTagIds.value, tag.id])
   }
 }
 
 async function handleSelect(id: string): Promise<void> {
+  if (isTrashingNote.value) return
   try {
     await autoSave.flush()
+    if (isTrashingNote.value) return
     await notesStore.selectNote(id)
   } catch {
     return
@@ -293,6 +332,7 @@ async function handleSelect(id: string): Promise<void> {
 }
 
 function handleKeyboardShortcut(event: KeyboardEvent): void {
+  if (isTrashingNote.value) return
   if (!event.metaKey && !event.ctrlKey) {
     return
   }
@@ -330,11 +370,12 @@ async function handleTogglePin(): Promise<void> {
 }
 
 onMounted(async () => {
-  await Promise.all([categoriesStore.load(), tagsStore.load()])
   window.addEventListener('keydown', handleKeyboardShortcut)
+  await Promise.all([categoriesStore.load(), tagsStore.load()])
 })
 
 onBeforeUnmount(() => {
+  removeNavigationGuard()
   window.removeEventListener('keydown', handleKeyboardShortcut)
 })
 </script>
@@ -343,27 +384,35 @@ onBeforeUnmount(() => {
   <WorkspaceLayout
     :categories="categoriesStore.categories"
     :tag-count="tagsStore.tags.length"
-    :note-drop-enabled="!isMovingNote"
+    :note-drop-enabled="!isMovingNote && !isTrashingNote"
     @create="handleCreate"
     @move-note="handleMoveNote"
   >
     <template #list>
       <NoteList
+        :inert="isTrashingNote"
+        :key="`${route.query.category ?? ''}:${route.query.tags ?? ''}`"
         :notes="notes"
         :category-name="activeCategoryName"
         :selected-id="selectedNote?.id"
         :search-query="searchQuery"
         :loading="isLoading"
-        :error="error?.message"
+        :error="notesStore.listError?.message"
+        :total="notesStore.total"
+        :has-more="notesStore.nextOffset !== null"
+        :loading-more="notesStore.isLoadingMore"
+        remote-search
         @create="handleCreate"
         @retry="handleLoad"
         @select="handleSelect"
-        @search="listSearchQuery = $event"
+        @search="handleListSearch"
+        @load-more="notesStore.loadNext"
       />
     </template>
 
     <template #editor>
       <NoteEditor
+        :inert="isTrashingNote"
         ref="noteEditor"
         :note="selectedNote"
         :save-status="saveStatus"

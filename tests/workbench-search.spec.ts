@@ -1,4 +1,5 @@
 import { createPinia } from 'pinia'
+import { notePage } from './helpers/note-page'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -39,6 +40,7 @@ async function mountWorkbench(query: Record<string, string> = {}) {
           emits: ['update:modelValue'],
           template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
         },
+        ElButton: true,
         ElIcon: { template: '<i><slot /></i>' },
         ElScrollbar: { template: '<div><slot /></div>' },
       },
@@ -53,6 +55,8 @@ describe('工作台搜索与标签同步', () => {
     invoke.mockReset()
     invoke.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
       switch (command) {
+        case 'list_note_page':
+          return notePage(notes, args?.request)
         case 'list_notes':
           return notes.map((note) => ({ ...note, contentPreview: note.content, tagNames: [] }))
         case 'get_note':
@@ -146,5 +150,26 @@ describe('工作台搜索与标签同步', () => {
     expect(editor.props('note')?.id).toBe('second')
     expect(editor.props('selectedTagIds')).toEqual(['second-tag'])
     wrapper.unmount()
+  })
+
+  it('列表检索防抖后查询全部摘要，清空立即复位', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const { wrapper } = await mountWorkbench()
+    const input = wrapper.get('.note-list-search')
+    await input.setValue('Git')
+    await vi.advanceTimersByTimeAsync(200)
+    await input.setValue('GitHub')
+    await vi.advanceTimersByTimeAsync(249)
+    expect(invoke.mock.calls.filter(([command]) => command === 'list_note_page')).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(1)
+    await flushPromises()
+    expect(invoke).toHaveBeenLastCalledWith('list_note_page', {
+      request: { limit: 50, query: 'GitHub' },
+    })
+    await input.setValue('')
+    await flushPromises()
+    expect(invoke).toHaveBeenLastCalledWith('list_note_page', { request: { limit: 50, query: '' } })
+    wrapper.unmount()
+    vi.useRealTimers()
   })
 })

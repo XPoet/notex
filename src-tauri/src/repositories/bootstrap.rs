@@ -35,16 +35,33 @@ impl BootstrapRepository {
         drop(statement);
 
         for note_id in &note_ids {
+            let content: String = transaction
+                .query_row(
+                    "SELECT content FROM recovery_drafts WHERE note_id = ?1",
+                    params![note_id],
+                    |row| row.get(0),
+                )
+                .map_err(BootstrapError::migration_failed)?;
             transaction
                 .execute(
                     "UPDATE notes
                      SET title = (SELECT title FROM recovery_drafts WHERE note_id = ?1),
                          content = (SELECT content FROM recovery_drafts WHERE note_id = ?1),
+                         content_preview = ?3,
                          updated_at = ?2
                      WHERE id = ?1 AND is_deleted = 0",
-                    params![note_id, now],
+                    params![
+                        note_id,
+                        now,
+                        crate::repositories::notes::content_preview(&content)
+                    ],
                 )
                 .map_err(BootstrapError::migration_failed)?;
+            crate::repositories::search::SearchRepository::refresh_note_in_transaction(
+                &transaction,
+                note_id,
+            )
+            .map_err(|_| BootstrapError::BootstrapFailed)?;
             transaction
                 .execute(
                     "DELETE FROM recovery_drafts WHERE note_id = ?1",

@@ -13,6 +13,10 @@ const props = defineProps<{
   loading: boolean
   error?: string
   searchQuery?: string
+  total?: number
+  hasMore?: boolean
+  loadingMore?: boolean
+  remoteSearch?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -20,6 +24,7 @@ const emit = defineEmits<{
   retry: []
   select: [id: string]
   search: [query: string]
+  loadMore: []
 }>()
 
 const query = shallowRef('')
@@ -29,6 +34,7 @@ const viewportHeight = shallowRef(600)
 const itemHeight = 96
 const renderBuffer = 6
 const visibleNotes = computed(() => {
+  if (props.remoteSearch) return props.notes
   const keyword = query.value.trim().toLocaleLowerCase()
   if (keyword === '') {
     return props.notes
@@ -45,9 +51,7 @@ const visibleRange = computed(() => {
   }
 })
 const renderedNotes = computed(() => visibleNotes.value.slice(visibleRange.value.start, visibleRange.value.end))
-const noteListTitle = computed(() =>
-  props.categoryName === undefined ? t('全部笔记') : t('{value1}笔记', { value1: props.categoryName }),
-)
+const noteListTitle = computed(() => (props.categoryName === undefined ? t('全部笔记') : props.categoryName))
 const virtualHeight = computed(() => visibleNotes.value.length * itemHeight)
 const virtualOffset = computed(() => visibleRange.value.start * itemHeight)
 
@@ -58,6 +62,13 @@ function updateVisibleRange(): void {
   }
   scrollTop.value = container.scrollTop
   viewportHeight.value = Math.max(container.clientHeight, itemHeight)
+  if (
+    props.hasMore &&
+    !props.loadingMore &&
+    container.scrollTop + container.clientHeight >= container.scrollHeight - itemHeight * 3
+  ) {
+    emit('loadMore')
+  }
 }
 
 onMounted(() => {
@@ -75,7 +86,7 @@ onBeforeUnmount(() => {
     <header class="note-list-header">
       <div class="note-list-heading">
         <h1 class="note-list-title">{{ noteListTitle }}</h1>
-        <span class="note-list-count">{{ notes.length }}</span>
+        <span class="note-list-count">{{ total ?? notes.length }}</span>
       </div>
       <el-input
         v-model="query"
@@ -96,7 +107,7 @@ onBeforeUnmount(() => {
       <p class="note-list-empty-copy">{{ localizeMessage(error) }}</p>
       <el-button type="primary" @click="emit('retry')">{{ t('重试') }}</el-button>
     </div>
-    <div v-else-if="notes.length === 0" class="note-list-empty">
+    <div v-else-if="notes.length === 0 && query.trim() === ''" class="note-list-empty">
       <p class="note-list-empty-title">{{ t('从一条笔记开始') }}</p>
       <p class="note-list-empty-copy">{{ t('点击“新建笔记”，内容会自动保存在本机。') }}</p>
       <el-button type="primary" @click="emit('create')">{{ t('新建第一条笔记') }}</el-button>
@@ -118,6 +129,9 @@ onBeforeUnmount(() => {
           />
         </div>
       </div>
+      <el-button v-if="hasMore" class="note-list-load-more" text :loading="loadingMore" @click="emit('loadMore')">
+        {{ t('加载更多') }}
+      </el-button>
     </el-scrollbar>
   </section>
 </template>
@@ -175,6 +189,10 @@ onBeforeUnmount(() => {
 
 .note-list-items {
   min-block-size: 0;
+}
+
+.note-list-load-more {
+  inline-size: 100%;
 }
 
 .note-list-items :deep(.el-scrollbar__view) {

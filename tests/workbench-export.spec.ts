@@ -1,4 +1,5 @@
 import { createPinia } from 'pinia'
+import { notePage, noteSaveResult } from './helpers/note-page'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -100,6 +101,8 @@ describe('工作台导出范围', () => {
     })
     invoke.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
       switch (command) {
+        case 'list_note_page':
+          return notePage([storedNote], args?.request)
         case 'list_notes':
         case 'list_notes_by_category':
         case 'list_notes_by_tags':
@@ -109,7 +112,7 @@ describe('工作台导出范围', () => {
         case 'save_note':
           if (saveFailure !== undefined) throw saveFailure
           storedNote = { ...storedNote, ...args }
-          return storedNote
+          return noteSaveResult(storedNote)
         case 'list_categories':
         case 'list_tags':
         case 'list_note_tags':

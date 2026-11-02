@@ -4,7 +4,9 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use uuid::Uuid;
 
 use crate::database::connection::open_database;
-use crate::domain::notes::{NoteDetail, NoteError, NoteSummary};
+use crate::domain::notes::{
+    NoteDetail, NoteError, NoteListRequest, NotePage, NoteSaveResult, NoteSummary,
+};
 use crate::repositories::notes::NotesRepository;
 use crate::repositories::settings::SettingsRepository;
 
@@ -44,12 +46,40 @@ impl NotesService {
         NotesRepository::list(&connection, note_sort)
     }
 
+    pub fn page(&self, request: NoteListRequest) -> Result<NotePage, NoteError> {
+        if request.limit.is_some_and(|limit| limit == 0 || limit > 100)
+            || (request.category_id.is_some() && request.uncategorized.unwrap_or(false))
+            || request
+                .query
+                .as_ref()
+                .is_some_and(|query| query.chars().count() > 200)
+            || request.tag_ids.as_ref().is_some_and(|ids| {
+                ids.len() > 100 || ids.iter().any(|id| id.is_empty() || id.len() > 128)
+            })
+            || request
+                .category_id
+                .as_ref()
+                .is_some_and(|id| id.is_empty() || id.len() > 128)
+        {
+            return Err(NoteError::ValidationFailed);
+        }
+        let mut connection =
+            open_database(&self.database_path).map_err(|_| NoteError::ListFailed)?;
+        let transaction = connection
+            .transaction()
+            .map_err(|_| NoteError::ListFailed)?;
+        let note_sort = SettingsRepository::note_sort(&transaction).unwrap_or_default();
+        let page = NotesRepository::page(&transaction, &request, note_sort)?;
+        transaction.commit().map_err(|_| NoteError::ListFailed)?;
+        Ok(page)
+    }
+
     pub fn get(&self, id: &str) -> Result<NoteDetail, NoteError> {
         let connection = open_database(&self.database_path).map_err(|_| NoteError::SaveFailed)?;
         NotesRepository::find_detail(&connection, id)
     }
 
-    pub fn save(&self, id: &str, title: &str, content: &str) -> Result<NoteDetail, NoteError> {
+    pub fn save(&self, id: &str, title: &str, content: &str) -> Result<NoteSaveResult, NoteError> {
         validate_note(title, content)?;
         let mut connection =
             open_database(&self.database_path).map_err(|_| NoteError::SaveFailed)?;
@@ -63,11 +93,10 @@ impl NotesService {
         NotesRepository::set_pinned(&mut connection, id, pinned, &current_time()?)
     }
 
-    pub fn cleanup_empty(&self, id: &str) -> Result<(), NoteError> {
+    pub fn cleanup_empty(&self, id: &str) -> Result<bool, NoteError> {
         let mut connection =
             open_database(&self.database_path).map_err(|_| NoteError::SaveFailed)?;
-        NotesRepository::cleanup_empty(&mut connection, id)?;
-        Ok(())
+        NotesRepository::cleanup_empty(&mut connection, id)
     }
 
     pub fn save_recovery_draft(
@@ -135,7 +164,7 @@ mod tests {
 
         let note = service.create()?;
         let saved = service.save(&note.id, "标题", "正文")?;
-        assert_eq!(saved.content, "正文");
+        assert_eq!(saved.summary.content_preview, "正文");
         assert_eq!(service.list()?[0].content_preview, "正文");
         service.cleanup_empty(&note.id)?;
         assert_eq!(service.list()?.len(), 1);
@@ -159,7 +188,7 @@ mod tests {
 
         let saved = service.save(&note.id, "", content)?;
 
-        assert_eq!(saved.content, content);
+        assert_eq!(service.get(&saved.id)?.content, content);
         Ok(())
     }
 }

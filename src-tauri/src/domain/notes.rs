@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Serialize)]
@@ -11,6 +11,33 @@ pub struct NoteSummary {
     pub is_pinned: bool,
     pub created_at: String,
     pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NoteListRequest {
+    pub category_id: Option<String>,
+    pub uncategorized: Option<bool>,
+    pub tag_ids: Option<Vec<String>>,
+    pub query: Option<String>,
+    pub offset: Option<u32>,
+    pub limit: Option<u32>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotePage {
+    pub items: Vec<NoteSummary>,
+    pub total: u32,
+    pub next_offset: Option<u32>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteSaveResult {
+    pub id: String,
+    pub updated_at: String,
+    pub summary: NoteSummary,
 }
 
 #[derive(Debug, Clone, Serialize)]

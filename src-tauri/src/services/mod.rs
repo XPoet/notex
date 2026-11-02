@@ -11,3 +11,6 @@ pub mod settings;
 pub mod shutdown;
 pub mod tags;
 pub mod trash;
+
+#[cfg(test)]
+mod performance_tests;

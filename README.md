@@ -65,7 +65,7 @@ pnpm tauri:dev
 1. 通过 Tauri 系统路径 API 获取固定应用数据目录。
 2. 创建 `database`、`assets`、`temp`、`logs`、`config` 子目录。
 3. 创建或打开 `database/notex.db`。
-4. 应用 V001 Migration，并向前端返回数据目录与结构版本。
+4. 应用尚未执行的 Migration（当前至 V004），初始化摘要与搜索索引版本，并返回就绪状态和结构版本。
 
 初始化失败时，应用显示安全诊断与重试入口；不会把 SQL、数据库绝对路径或笔记内容暴露给界面。
 
@@ -185,3 +185,7 @@ tests/               前端单元与组件测试
 - Tauri Command 与前后端 DTO 以 [docs/IPC.md](docs/IPC.md) 为准；Vue 组件不得直接调用 `invoke()`。
 - 不得通过删除数据库或临时执行 DDL 代替 Migration；已发布 Migration 不得修改。
 - 前端不得读取应用数据目录或执行 SQL；数据库和文件系统仅由 Rust 管理。
+
+## 性能优化方案
+
+架构审查证据、整改范围和验收记录见 [性能优化方案](docs/PERFORMANCE-OPTIMIZATION-PLAN.md)。工作台按页读取持久摘要，长文统计与图片解析离开逐键同步路径；数据库升级通过新增 Migration 执行。

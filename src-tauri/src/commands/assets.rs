@@ -28,9 +28,14 @@ pub async fn read_note_image(
     app: AppHandle,
     note_id: String,
     relative_path: String,
+    thumbnail: Option<bool>,
 ) -> Result<tauri::ipc::Response, AssetCommandError> {
     let bytes = run_blocking(app, move |service| {
-        service.read_note_image(&note_id, &relative_path)
+        if thumbnail.unwrap_or(false) {
+            service.read_note_thumbnail(&note_id, &relative_path)
+        } else {
+            service.read_note_image(&note_id, &relative_path)
+        }
     })
     .await?;
     Ok(tauri::ipc::Response::new(bytes))

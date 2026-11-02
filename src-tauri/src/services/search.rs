@@ -37,6 +37,12 @@ impl SearchService {
         SearchRepository::search(&connection, &expression, offset, limit)
     }
 
+    pub fn ensure_index(&self) -> Result<(), SearchError> {
+        let mut connection =
+            open_database(&self.database_path).map_err(|_| SearchError::IndexRebuild)?;
+        SearchRepository::ensure_index(&mut connection)
+    }
+
     pub fn rebuild(&self) -> Result<(), SearchError> {
         let mut connection =
             open_database(&self.database_path).map_err(|_| SearchError::IndexRebuild)?;

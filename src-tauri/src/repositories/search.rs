@@ -24,23 +24,71 @@ impl SearchRepository {
         transaction.commit().map_err(|_| SearchError::IndexRebuild)
     }
 
+    pub fn ensure_index(connection: &mut Connection) -> Result<(), SearchError> {
+        let version: u32 = connection
+            .query_row(
+                "SELECT version FROM search_index_state WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|_| SearchError::IndexRebuild)?;
+        if version != 1 {
+            Self::rebuild_index(connection)?;
+        }
+        Ok(())
+    }
+
     pub fn rebuild_index_in_transaction(transaction: &Transaction<'_>) -> Result<(), SearchError> {
-        let documents = read_search_documents(transaction)?;
         transaction
             .execute("DELETE FROM notes_fts", [])
             .map_err(|_| SearchError::IndexRebuild)?;
-        let mut insert = transaction
-            .prepare("INSERT INTO notes_fts (note_id, search_text) VALUES (?1, ?2)")
+        // Keep stable document IDs across repairs, and stream one note at a time.
+        let mut statement = transaction
+            .prepare("SELECT id FROM notes WHERE is_deleted = 0 ORDER BY id")
             .map_err(|_| SearchError::IndexRebuild)?;
-        for document in documents {
-            let searchable_text = tokenize_for_index(&[
-                &document.title,
-                &document.content,
-                &document.category_path,
-                &document.tag_names,
-            ]);
-            insert
-                .execute(params![document.note_id, searchable_text])
+        let note_ids = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|_| SearchError::IndexRebuild)?;
+        for note_id in note_ids {
+            Self::refresh_note_in_transaction(
+                transaction,
+                &note_id.map_err(|_| SearchError::IndexRebuild)?,
+            )?;
+        }
+        transaction
+            .execute("UPDATE search_index_state SET version = 1 WHERE id = 1", [])
+            .map_err(|_| SearchError::IndexRebuild)?;
+        Ok(())
+    }
+
+    pub fn refresh_notes_in_transaction(
+        transaction: &Transaction<'_>,
+        note_ids: &[String],
+    ) -> Result<(), SearchError> {
+        for note_id in note_ids {
+            Self::refresh_note_in_transaction(transaction, note_id)?;
+        }
+        Ok(())
+    }
+
+    pub fn remove_note_in_transaction(
+        transaction: &Transaction<'_>,
+        note_id: &str,
+    ) -> Result<(), SearchError> {
+        let document_id = transaction
+            .query_row(
+                "SELECT document_id FROM note_search_documents WHERE note_id = ?1",
+                params![note_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()
+            .map_err(|_| SearchError::IndexRebuild)?;
+        if let Some(document_id) = document_id {
+            transaction
+                .execute(
+                    "DELETE FROM notes_fts WHERE rowid = ?1",
+                    params![document_id],
+                )
                 .map_err(|_| SearchError::IndexRebuild)?;
         }
         Ok(())
@@ -50,12 +98,23 @@ impl SearchRepository {
         transaction: &Transaction<'_>,
         note_id: &str,
     ) -> Result<(), SearchError> {
-        transaction
-            .execute("DELETE FROM notes_fts WHERE note_id = ?1", params![note_id])
-            .map_err(|_| SearchError::IndexRebuild)?;
+        Self::remove_note_in_transaction(transaction, note_id)?;
         let Some(document) = read_search_document(transaction, note_id)? else {
             return Ok(());
         };
+        transaction
+            .execute(
+                "INSERT OR IGNORE INTO note_search_documents (note_id) VALUES (?1)",
+                params![note_id],
+            )
+            .map_err(|_| SearchError::IndexRebuild)?;
+        let document_id: i64 = transaction
+            .query_row(
+                "SELECT document_id FROM note_search_documents WHERE note_id = ?1",
+                params![note_id],
+                |row| row.get(0),
+            )
+            .map_err(|_| SearchError::IndexRebuild)?;
         let searchable_text = tokenize_for_index(&[
             &document.title,
             &document.content,
@@ -64,8 +123,8 @@ impl SearchRepository {
         ]);
         transaction
             .execute(
-                "INSERT INTO notes_fts (note_id, search_text) VALUES (?1, ?2)",
-                params![document.note_id, searchable_text],
+                "INSERT INTO notes_fts (rowid, note_id, search_text) VALUES (?1, ?2, ?3)",
+                params![document_id, document.note_id, searchable_text],
             )
             .map_err(|_| SearchError::IndexRebuild)?;
         Ok(())
@@ -95,7 +154,7 @@ impl SearchRepository {
                    SELECT categories.id, category_paths.path || ' / ' || categories.name
                    FROM categories INNER JOIN category_paths ON categories.parent_id = category_paths.id
                  )
-                 SELECT notes.id, notes.title, notes.content, category_paths.path, notes.updated_at
+                 SELECT notes.id, notes.title, notes.content_preview, category_paths.path, notes.updated_at
                  FROM notes_fts
                  INNER JOIN notes ON notes.id = notes_fts.note_id
                  LEFT JOIN category_paths ON category_paths.id = notes.category_id
@@ -112,7 +171,7 @@ impl SearchRepository {
                     Ok(SearchResult {
                         id: row.get(0)?,
                         title: row.get(1)?,
-                        content_preview: content_preview(&content),
+                        content_preview: content,
                         category_path: row.get(3)?,
                         tag_names: Vec::new(),
                         updated_at: row.get(4)?,
@@ -141,50 +200,11 @@ impl SearchRepository {
             .iter()
             .filter_map(|term| {
                 let tokens = tokenize_value(term);
-                (!tokens.is_empty()).then(|| format!("\"{}\"", tokens.join(" ")))
+                (!tokens.is_empty()).then(|| format!("\"{tokens}\""))
             })
             .collect::<Vec<_>>();
         (!expressions.is_empty()).then(|| expressions.join(" AND "))
     }
-}
-
-fn read_search_documents(
-    transaction: &Transaction<'_>,
-) -> Result<Vec<SearchDocument>, SearchError> {
-    let mut statement = transaction
-        .prepare(
-            "WITH RECURSIVE category_paths(id, path) AS (
-               SELECT id, name FROM categories WHERE parent_id IS NULL
-               UNION ALL
-               SELECT categories.id, category_paths.path || ' / ' || categories.name
-               FROM categories INNER JOIN category_paths ON categories.parent_id = category_paths.id
-             )
-             SELECT notes.id, notes.title, notes.content, COALESCE(category_paths.path, ''),
-                    COALESCE((
-                      SELECT group_concat(tags.name, ' ')
-                      FROM note_tags
-                      INNER JOIN tags ON tags.id = note_tags.tag_id
-                      WHERE note_tags.note_id = notes.id
-                    ), '')
-             FROM notes
-             LEFT JOIN category_paths ON category_paths.id = notes.category_id
-             WHERE notes.is_deleted = 0
-             ORDER BY notes.id",
-        )
-        .map_err(|_| SearchError::IndexRebuild)?;
-    let rows = statement
-        .query_map([], |row| {
-            Ok(SearchDocument {
-                note_id: row.get(0)?,
-                title: row.get(1)?,
-                content: row.get(2)?,
-                category_path: row.get(3)?,
-                tag_names: row.get(4)?,
-            })
-        })
-        .map_err(|_| SearchError::IndexRebuild)?;
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|_| SearchError::IndexRebuild)
 }
 
 fn read_search_document(
@@ -260,33 +280,37 @@ fn read_tag_names(
 }
 
 fn tokenize_for_index(values: &[&str]) -> String {
-    values
-        .iter()
-        .flat_map(|value| tokenize_value(value))
-        .collect::<Vec<_>>()
-        .join(" ")
+    let mut output = String::new();
+    for value in values {
+        append_tokens(value, &mut output);
+    }
+    output
 }
 
-fn tokenize_value(value: &str) -> Vec<String> {
-    let mut tokens = Vec::new();
-    let mut word = String::new();
+fn tokenize_value(value: &str) -> String {
+    let mut output = String::new();
+    append_tokens(value, &mut output);
+    output
+}
+
+fn append_tokens(value: &str, output: &mut String) {
+    let mut in_word = false;
     for character in value.chars() {
         if is_han_character(character) {
-            push_word(&mut tokens, &mut word);
-            tokens.push(character.to_string());
+            if !output.is_empty() {
+                output.push(' ');
+            }
+            output.push(character);
+            in_word = false;
         } else if character.is_alphanumeric() {
-            word.extend(character.to_lowercase());
+            if !in_word && !output.is_empty() {
+                output.push(' ');
+            }
+            output.extend(character.to_lowercase());
+            in_word = true;
         } else {
-            push_word(&mut tokens, &mut word);
+            in_word = false;
         }
-    }
-    push_word(&mut tokens, &mut word);
-    tokens
-}
-
-fn push_word(tokens: &mut Vec<String>, word: &mut String) {
-    if !word.is_empty() {
-        tokens.push(std::mem::take(word));
     }
 }
 
@@ -295,16 +319,6 @@ fn is_han_character(character: char) -> bool {
         character as u32,
         0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF | 0x20000..=0x2EBEF
     )
-}
-
-fn content_preview(content: &str) -> String {
-    content
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .chars()
-        .take(160)
-        .collect()
 }
 
 #[cfg(test)]
