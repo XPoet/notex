@@ -23,7 +23,7 @@ impl BootstrapService {
         let schema_version = BootstrapRepository::initialize(&database_path)?;
         BootstrapRepository::restore_recovery_drafts(&database_path, &current_time()?)?;
         SearchService::new(&self.data_directory)
-            .rebuild()
+            .ensure_index()
             .map_err(|_| BootstrapError::MigrationFailed)?;
         let _ = AssetsService::new(&self.data_directory).cleanup_pending();
 
@@ -90,8 +90,8 @@ mod tests {
         let second_snapshot = service.bootstrap()?;
 
         assert_eq!(first_snapshot.status, "ready");
-        assert_eq!(first_snapshot.schema_version, 3);
-        assert_eq!(second_snapshot.schema_version, 3);
+        assert_eq!(first_snapshot.schema_version, 4);
+        assert_eq!(second_snapshot.schema_version, 4);
         for directory_name in ["database", "assets", "temp", "logs", "config"] {
             assert!(data_directory.join(directory_name).is_dir());
         }
@@ -106,7 +106,7 @@ mod tests {
       [],
       |row| row.get(0),
     )?;
-        assert_eq!(migration_count, 3);
+        assert_eq!(migration_count, 4);
         assert_eq!(table_count, 8);
 
         Ok(())
@@ -145,7 +145,7 @@ mod tests {
     }
 
     #[test]
-    fn performance_cold_start_rebuilds_a_ten_thousand_note_index_within_target_duration()
+    fn performance_normal_start_reuses_a_ten_thousand_note_index_within_target_duration()
     -> Result<(), Box<dyn std::error::Error>> {
         let data_directory = test_data_directory();
         let service = BootstrapService::new(data_directory.clone());
@@ -166,13 +166,17 @@ mod tests {
             )?;
         }
         transaction.commit()?;
+        crate::services::search::SearchService::new(&data_directory).rebuild()?;
 
         let start = Instant::now();
         service.bootstrap()?;
 
         let elapsed = start.elapsed();
         assert!(elapsed < Duration::from_secs(2));
-        eprintln!("10,000 条性能夹具：冷启动 {} ms。", elapsed.as_millis());
+        eprintln!(
+            "10,000 条性能夹具：复用索引启动 {} ms。",
+            elapsed.as_millis()
+        );
         Ok(())
     }
 }

@@ -32,55 +32,60 @@ impl CategoriesService {
         parent_id: Option<&str>,
     ) -> Result<CategoryNode, CategoryError> {
         let name = normalized_name(name)?;
-        let mut connection =
-            open_database(&self.database_path).map_err(|_| CategoryError::OperationFailed)?;
-        let category = CategoriesRepository::create(
-            &mut connection,
-            &Uuid::new_v4().to_string(),
-            &name,
-            parent_id,
-            &current_time()?,
-        )?;
-        SearchRepository::rebuild_index(&mut connection)
-            .map_err(|_| CategoryError::OperationFailed)?;
-        Ok(category)
+        self.write(|transaction| {
+            CategoriesRepository::create(
+                transaction,
+                &Uuid::new_v4().to_string(),
+                &name,
+                parent_id,
+                &current_time()?,
+            )
+        })
     }
+
     pub fn rename(&self, id: &str, name: &str) -> Result<CategoryNode, CategoryError> {
         let name = normalized_name(name)?;
-        let mut connection =
-            open_database(&self.database_path).map_err(|_| CategoryError::OperationFailed)?;
-        let category = CategoriesRepository::rename(&mut connection, id, &name, &current_time()?)?;
-        SearchRepository::rebuild_index(&mut connection)
-            .map_err(|_| CategoryError::OperationFailed)?;
-        Ok(category)
+        self.write(|transaction| {
+            let affected = CategoriesRepository::note_ids_in_branch(transaction, id)?;
+            let category = CategoriesRepository::rename(transaction, id, &name, &current_time()?)?;
+            SearchRepository::refresh_notes_in_transaction(transaction, &affected)
+                .map_err(|_| CategoryError::OperationFailed)?;
+            Ok(category)
+        })
     }
+
     pub fn move_category(
         &self,
         id: &str,
         parent_id: Option<&str>,
         ordered_ids: &[String],
     ) -> Result<(), CategoryError> {
-        let mut connection =
-            open_database(&self.database_path).map_err(|_| CategoryError::OperationFailed)?;
-        CategoriesRepository::move_category(
-            &mut connection,
-            id,
-            parent_id,
-            ordered_ids,
-            &current_time()?,
-        )?;
-        SearchRepository::rebuild_index(&mut connection).map_err(|_| CategoryError::OperationFailed)
+        self.write(|transaction| {
+            let affected = CategoriesRepository::note_ids_in_branch(transaction, id)?;
+            CategoriesRepository::move_category(
+                transaction,
+                id,
+                parent_id,
+                ordered_ids,
+                &current_time()?,
+            )?;
+            SearchRepository::refresh_notes_in_transaction(transaction, &affected)
+                .map_err(|_| CategoryError::OperationFailed)
+        })
     }
+
     pub fn impact(&self, id: &str) -> Result<CategoryDeleteImpact, CategoryError> {
         let connection =
             open_database(&self.database_path).map_err(|_| CategoryError::OperationFailed)?;
         CategoriesRepository::delete_impact(&connection, id)
     }
     pub fn delete(&self, id: &str, mode: CategoryDeleteMode) -> Result<(), CategoryError> {
-        let mut connection =
-            open_database(&self.database_path).map_err(|_| CategoryError::OperationFailed)?;
-        CategoriesRepository::delete(&mut connection, id, mode, &current_time()?)?;
-        SearchRepository::rebuild_index(&mut connection).map_err(|_| CategoryError::OperationFailed)
+        self.write(|transaction| {
+            let affected = CategoriesRepository::note_ids_in_branch(transaction, id)?;
+            CategoriesRepository::delete(transaction, id, mode, &current_time()?)?;
+            SearchRepository::refresh_notes_in_transaction(transaction, &affected)
+                .map_err(|_| CategoryError::OperationFailed)
+        })
     }
     pub fn notes_by_category(
         &self,
@@ -96,31 +101,32 @@ impl CategoriesService {
         note_id: &str,
         category_id: Option<&str>,
     ) -> Result<(), CategoryError> {
+        self.write(|transaction| {
+            CategoriesRepository::set_note_category(
+                transaction,
+                note_id,
+                category_id,
+                &current_time()?,
+            )?;
+            SearchRepository::refresh_note_in_transaction(transaction, note_id)
+                .map_err(|_| CategoryError::OperationFailed)
+        })
+    }
+
+    fn write<T>(
+        &self,
+        operation: impl FnOnce(&rusqlite::Transaction<'_>) -> Result<T, CategoryError>,
+    ) -> Result<T, CategoryError> {
         let mut connection =
             open_database(&self.database_path).map_err(|_| CategoryError::OperationFailed)?;
         let transaction = connection
-            .transaction()
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .map_err(|_| CategoryError::OperationFailed)?;
-        if let Some(category_id) = category_id {
-            let exists = transaction
-                .query_row(
-                    "SELECT 1 FROM categories WHERE id = ?1",
-                    rusqlite::params![category_id],
-                    |_| Ok(()),
-                )
-                .is_ok();
-            if !exists {
-                return Err(CategoryError::NotFound);
-            }
-        }
-        let changed = transaction.execute("UPDATE notes SET category_id = ?2, updated_at = ?3 WHERE id = ?1 AND is_deleted = 0", rusqlite::params![note_id, category_id, current_time()?]).map_err(|_| CategoryError::OperationFailed)?;
-        if changed == 0 {
-            return Err(CategoryError::NotFound);
-        }
+        let result = operation(&transaction)?;
         transaction
             .commit()
             .map_err(|_| CategoryError::OperationFailed)?;
-        SearchRepository::rebuild_index(&mut connection).map_err(|_| CategoryError::OperationFailed)
+        Ok(result)
     }
 }
 fn normalized_name(value: &str) -> Result<String, CategoryError> {

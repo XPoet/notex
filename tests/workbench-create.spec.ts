@@ -1,4 +1,5 @@
 import { createPinia } from 'pinia'
+import { notePage, noteSaveResult } from './helpers/note-page'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -58,6 +59,7 @@ async function mountWorkbench(query: Record<string, string> = {}) {
 
 describe('工作台分类新建笔记', () => {
   beforeEach(() => {
+    existingNote.categoryId = 'other'
     createdNote = undefined
     invoke.mockReset()
     invoke.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
@@ -75,6 +77,8 @@ describe('工作台分类新建笔记', () => {
         case 'list_tags':
         case 'list_note_tags':
           return []
+        case 'list_note_page':
+          return notePage(createdNote === undefined ? [existingNote] : [createdNote, existingNote], args?.request)
         case 'list_notes':
           return createdNote === undefined ? [existingNote] : [createdNote, existingNote]
         case 'list_notes_by_category':
@@ -93,7 +97,7 @@ describe('工作台分类新建笔记', () => {
           }
           return createdNote
         case 'save_note':
-          return { ...existingNote, ...args }
+          return noteSaveResult({ ...existingNote, ...args })
         case 'cleanup_empty_note':
           return undefined
         case 'get_note_asset_health':
@@ -163,6 +167,7 @@ describe('工作台分类新建笔记', () => {
     ['Command + N', { metaKey: true }],
     ['Ctrl + N', { ctrlKey: true }],
   ])('%s 保存当前草稿并在当前分类新建一条笔记', async (_shortcut, modifiers) => {
+    existingNote.categoryId = 'work'
     const { wrapper, store } = await mountWorkbench({ category: 'work' })
     store.updateDraft({ title: '快捷键前的标题', content: '快捷键前的正文' })
     const event = new KeyboardEvent('keydown', { key: 'n', ...modifiers, cancelable: true })

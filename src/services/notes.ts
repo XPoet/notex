@@ -1,5 +1,14 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { NoteDetail, NoteError, NoteErrorCode, NoteSaveRequest, NoteSummary } from '@/types/notes'
+import type {
+  NoteDetail,
+  NoteError,
+  NoteErrorCode,
+  NoteListRequest,
+  NotePage,
+  NoteSaveRequest,
+  NoteSaveResult,
+  NoteSummary,
+} from '@/types/notes'
 
 interface TauriErrorPayload {
   code?: unknown
@@ -48,20 +57,24 @@ export function listNotes(): Promise<NoteSummary[]> {
   return call<NoteSummary[]>('list_notes')
 }
 
+export function listNotePage(request: NoteListRequest): Promise<NotePage> {
+  return call<NotePage>('list_note_page', { request })
+}
+
 export function getNote(id: string): Promise<NoteDetail> {
   return call<NoteDetail>('get_note', { id })
 }
 
-export function saveNote(request: NoteSaveRequest): Promise<NoteDetail> {
-  return call<NoteDetail>('save_note', request)
+export function saveNote(request: NoteSaveRequest): Promise<NoteSaveResult> {
+  return call<NoteSaveResult>('save_note', request)
 }
 
 export function setNotePinned(id: string, pinned: boolean): Promise<NoteDetail> {
   return call<NoteDetail>('set_note_pinned', { id, pinned })
 }
 
-export function cleanupEmptyNote(id: string): Promise<void> {
-  return call<void>('cleanup_empty_note', { id })
+export function cleanupEmptyNote(id: string): Promise<boolean> {
+  return call<boolean>('cleanup_empty_note', { id })
 }
 
 export function saveRecoveryDraft(request: NoteSaveRequest, failureCode: string): Promise<void> {

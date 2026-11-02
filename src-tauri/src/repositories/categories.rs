@@ -7,7 +7,6 @@ use crate::domain::categories::{
 };
 use crate::domain::notes::NoteSummary;
 use crate::domain::settings::NoteSort;
-use crate::repositories::notes::tag_names_from_row;
 
 #[derive(Clone)]
 struct CategoryRecord {
@@ -79,15 +78,12 @@ impl CategoriesRepository {
     }
 
     pub fn create(
-        connection: &mut Connection,
+        transaction: &rusqlite::Transaction<'_>,
         id: &str,
         name: &str,
         parent_id: Option<&str>,
         now: &str,
     ) -> Result<CategoryNode, CategoryError> {
-        let transaction = connection
-            .transaction()
-            .map_err(|_| CategoryError::OperationFailed)?;
         let parent_level = match parent_id {
             Some(parent) => transaction
                 .query_row(
@@ -104,7 +100,7 @@ impl CategoriesRepository {
         if level > 5 {
             return Err(CategoryError::MaxDepthExceeded);
         }
-        ensure_unique_name(&transaction, name, parent_id, None)?;
+        ensure_unique_name(transaction, name, parent_id, None)?;
         let sort_order: i64 = transaction
             .query_row(
                 "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM categories WHERE parent_id IS ?1",
@@ -113,21 +109,15 @@ impl CategoriesRepository {
             )
             .map_err(|_| CategoryError::OperationFailed)?;
         transaction.execute("INSERT INTO categories (id, name, parent_id, level, sort_order, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)", params![id, name, parent_id, level, sort_order, now]).map_err(map_category_constraint)?;
-        transaction
-            .commit()
-            .map_err(|_| CategoryError::OperationFailed)?;
-        find_node(connection, id)
+        find_node(transaction, id)
     }
 
     pub fn rename(
-        connection: &mut Connection,
+        transaction: &rusqlite::Transaction<'_>,
         id: &str,
         name: &str,
         now: &str,
     ) -> Result<CategoryNode, CategoryError> {
-        let transaction = connection
-            .transaction()
-            .map_err(|_| CategoryError::OperationFailed)?;
         let parent_id = transaction
             .query_row(
                 "SELECT parent_id FROM categories WHERE id = ?1",
@@ -137,29 +127,23 @@ impl CategoriesRepository {
             .optional()
             .map_err(|_| CategoryError::OperationFailed)?
             .ok_or(CategoryError::NotFound)?;
-        ensure_unique_name(&transaction, name, parent_id.as_deref(), Some(id))?;
+        ensure_unique_name(transaction, name, parent_id.as_deref(), Some(id))?;
         transaction
             .execute(
                 "UPDATE categories SET name = ?2, updated_at = ?3 WHERE id = ?1",
                 params![id, name, now],
             )
             .map_err(map_category_constraint)?;
-        transaction
-            .commit()
-            .map_err(|_| CategoryError::OperationFailed)?;
-        find_node(connection, id)
+        find_node(transaction, id)
     }
 
     pub fn move_category(
-        connection: &mut Connection,
+        transaction: &rusqlite::Transaction<'_>,
         id: &str,
         parent_id: Option<&str>,
         ordered_ids: &[String],
         now: &str,
     ) -> Result<(), CategoryError> {
-        let transaction = connection
-            .transaction()
-            .map_err(|_| CategoryError::OperationFailed)?;
         let current = transaction
             .query_row(
                 "SELECT parent_id, level FROM categories WHERE id = ?1",
@@ -204,7 +188,7 @@ impl CategoriesRepository {
             return Err(CategoryError::MaxDepthExceeded);
         }
         ensure_unique_name(
-            &transaction,
+            transaction,
             &transaction
                 .query_row(
                     "SELECT name FROM categories WHERE id = ?1",
@@ -235,10 +219,8 @@ impl CategoriesRepository {
                 params![id, parent_id],
             )
             .map_err(|_| CategoryError::OperationFailed)?;
-        reorder_siblings(&transaction, parent_id, ordered_ids, now)?;
-        transaction
-            .commit()
-            .map_err(|_| CategoryError::OperationFailed)
+        reorder_siblings(transaction, parent_id, ordered_ids, now)?;
+        Ok(())
     }
 
     pub fn delete_impact(
@@ -280,14 +262,11 @@ impl CategoriesRepository {
     }
 
     pub fn delete(
-        connection: &mut Connection,
+        transaction: &rusqlite::Transaction<'_>,
         id: &str,
         mode: CategoryDeleteMode,
         now: &str,
     ) -> Result<(), CategoryError> {
-        let transaction = connection
-            .transaction()
-            .map_err(|_| CategoryError::OperationFailed)?;
         let parent_id = transaction
             .query_row(
                 "SELECT parent_id FROM categories WHERE id = ?1",
@@ -317,11 +296,48 @@ impl CategoriesRepository {
                     .execute("DELETE FROM categories WHERE id = ?1", params![id])
                     .map_err(|_| CategoryError::OperationFailed)?;
             }
-            CategoryDeleteMode::Branch => delete_branch(&transaction, id, now)?,
+            CategoryDeleteMode::Branch => delete_branch(transaction, id, now)?,
         }
-        transaction
-            .commit()
+        Ok(())
+    }
+
+    pub fn note_ids_in_branch(
+        connection: &Connection,
+        id: &str,
+    ) -> Result<Vec<String>, CategoryError> {
+        let mut statement = connection.prepare("WITH RECURSIVE descendants(id) AS (SELECT id FROM categories WHERE id = ?1 UNION ALL SELECT categories.id FROM categories JOIN descendants ON categories.parent_id = descendants.id) SELECT notes.id FROM notes WHERE notes.is_deleted = 0 AND notes.category_id IN descendants").map_err(|_| CategoryError::OperationFailed)?;
+        statement
+            .query_map(params![id], |row| row.get(0))
+            .map_err(|_| CategoryError::OperationFailed)?
+            .collect::<Result<Vec<_>, _>>()
             .map_err(|_| CategoryError::OperationFailed)
+    }
+
+    pub fn set_note_category(
+        transaction: &rusqlite::Transaction<'_>,
+        note_id: &str,
+        category_id: Option<&str>,
+        now: &str,
+    ) -> Result<(), CategoryError> {
+        if let Some(category_id) = category_id {
+            let exists = transaction
+                .query_row(
+                    "SELECT 1 FROM categories WHERE id = ?1",
+                    params![category_id],
+                    |_| Ok(()),
+                )
+                .optional()
+                .map_err(|_| CategoryError::OperationFailed)?
+                .is_some();
+            if !exists {
+                return Err(CategoryError::NotFound);
+            }
+        }
+        let changed = transaction.execute("UPDATE notes SET category_id = ?2, updated_at = ?3 WHERE id = ?1 AND is_deleted = 0", params![note_id, category_id, now]).map_err(|_| CategoryError::OperationFailed)?;
+        if changed == 0 {
+            return Err(CategoryError::NotFound);
+        }
+        Ok(())
     }
 
     pub fn notes_by_category(
@@ -329,41 +345,12 @@ impl CategoriesRepository {
         category_id: Option<&str>,
         note_sort: NoteSort,
     ) -> Result<Vec<NoteSummary>, CategoryError> {
-        let sql = match category_id {
-            Some(_) => {
-                format!(
-                    "WITH RECURSIVE descendants(id) AS (SELECT id FROM categories WHERE id = ?1 UNION ALL SELECT c.id FROM categories c JOIN descendants d ON c.parent_id = d.id) SELECT id, title, content, COALESCE((SELECT group_concat(name, char(31)) FROM (SELECT tags.name FROM note_tags JOIN tags ON tags.id = note_tags.tag_id WHERE note_tags.note_id = notes.id ORDER BY tags.name COLLATE NOCASE ASC)), ''), is_pinned, created_at, updated_at FROM notes WHERE is_deleted = 0 AND category_id IN descendants ORDER BY is_pinned DESC, {}",
-                    note_sort.order_by_sql()
-                )
-            }
-            None => {
-                format!(
-                    "SELECT id, title, content, COALESCE((SELECT group_concat(name, char(31)) FROM (SELECT tags.name FROM note_tags JOIN tags ON tags.id = note_tags.tag_id WHERE note_tags.note_id = notes.id ORDER BY tags.name COLLATE NOCASE ASC)), ''), is_pinned, created_at, updated_at FROM notes WHERE is_deleted = 0 AND category_id IS NULL ORDER BY is_pinned DESC, {}",
-                    note_sort.order_by_sql()
-                )
-            }
+        let request = crate::domain::notes::NoteListRequest {
+            category_id: category_id.map(ToOwned::to_owned),
+            uncategorized: Some(category_id.is_none()),
+            ..Default::default()
         };
-        let mut statement = connection
-            .prepare(&sql)
-            .map_err(|_| CategoryError::OperationFailed)?;
-        let mapper = |row: &rusqlite::Row<'_>| {
-            let content: String = row.get(2)?;
-            Ok(NoteSummary {
-                id: row.get(0)?,
-                title: row.get(1)?,
-                content_preview: content_preview(&content),
-                tag_names: tag_names_from_row(row.get(3)?),
-                is_pinned: row.get(4)?,
-                created_at: row.get(5)?,
-                updated_at: row.get(6)?,
-            })
-        };
-        let rows = match category_id {
-            Some(value) => statement.query_map(params![value], mapper),
-            None => statement.query_map([], mapper),
-        }
-        .map_err(|_| CategoryError::OperationFailed)?;
-        rows.collect::<Result<Vec<_>, _>>()
+        crate::repositories::notes::NotesRepository::list_matching(connection, &request, note_sort)
             .map_err(|_| CategoryError::OperationFailed)
     }
 }
@@ -481,15 +468,6 @@ fn count_notes(connection: &Connection, sql: &str, id: &str) -> Result<u32, Cate
     connection
         .query_row(sql, params![id], |row| row.get(0))
         .map_err(|_| CategoryError::OperationFailed)
-}
-fn content_preview(content: &str) -> String {
-    content
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .chars()
-        .take(160)
-        .collect()
 }
 fn map_category_constraint(_: rusqlite::Error) -> CategoryError {
     CategoryError::OperationFailed

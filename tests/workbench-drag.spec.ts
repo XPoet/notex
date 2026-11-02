@@ -1,4 +1,5 @@
 import { createPinia } from 'pinia'
+import { notePage, noteSaveResult } from './helpers/note-page'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -128,6 +129,8 @@ describe('工作台拖拽分类', () => {
         case 'list_tags':
         case 'list_note_tags':
           return []
+        case 'list_note_page':
+          return notePage(storedNotes, args?.request)
         case 'list_notes':
         case 'list_notes_by_category':
           return storedNotes
@@ -145,7 +148,9 @@ describe('工作台拖拽分类', () => {
           storedNotes = storedNotes.map((note) =>
             note.id === args?.id ? { ...note, title: String(args.title), content: String(args.content) } : note,
           )
-          return storedNotes.find((note) => note.id === args?.id)
+          const saved = storedNotes.find((note) => note.id === args?.id)
+          if (saved === undefined) throw new Error('测试笔记不存在')
+          return noteSaveResult(saved)
         }
         case 'set_note_category':
           if (moveFailure !== undefined) throw moveFailure

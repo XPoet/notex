@@ -32,7 +32,8 @@ export function useAutoSave(save: () => Promise<void>, delay = 1_000): AutoSaveC
     timer = setTimeout(() => {
       timer = undefined
       pending.value = false
-      void save()
+      // 显式 flush 向调用方传播错误；定时保存的错误由 Store 留在界面中。
+      void save().catch(() => undefined)
     }, delay)
   }
 

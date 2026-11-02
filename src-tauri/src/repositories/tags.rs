@@ -1,12 +1,10 @@
 use std::collections::HashSet;
 
-use rusqlite::types::Value;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::domain::notes::NoteSummary;
 use crate::domain::settings::NoteSort;
 use crate::domain::tags::{RenameTagResult, TagError, TagMergePreview, TagSummary};
-use crate::repositories::notes::tag_names_from_row;
 
 pub struct TagsRepository;
 
@@ -44,36 +42,27 @@ impl TagsRepository {
     }
 
     pub fn create(
-        connection: &mut Connection,
+        transaction: &rusqlite::Transaction<'_>,
         id: &str,
         name: &str,
         now: &str,
     ) -> Result<TagSummary, TagError> {
-        let transaction = connection
-            .transaction()
-            .map_err(|_| TagError::OperationFailed)?;
-        ensure_unique(&transaction, name, None)?;
+        ensure_unique(transaction, name, None)?;
         transaction
             .execute(
                 "INSERT INTO tags (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
                 params![id, name, now],
             )
             .map_err(|_| TagError::DuplicateName)?;
-        transaction
-            .commit()
-            .map_err(|_| TagError::OperationFailed)?;
-        find_tag(connection, id)
+        find_tag(transaction, id)
     }
 
     pub fn rename(
-        connection: &mut Connection,
+        transaction: &rusqlite::Transaction<'_>,
         id: &str,
         name: &str,
         now: &str,
     ) -> Result<RenameTagResult, TagError> {
-        let transaction = connection
-            .transaction()
-            .map_err(|_| TagError::OperationFailed)?;
         let exists = transaction
             .query_row("SELECT 1 FROM tags WHERE id = ?1", params![id], |_| Ok(()))
             .optional()
@@ -82,7 +71,7 @@ impl TagsRepository {
         if !exists {
             return Err(TagError::NotFound);
         }
-        if let Some(target_id) = tag_id_by_name(&transaction, name)? {
+        if let Some(target_id) = tag_id_by_name(transaction, name)? {
             if target_id != id {
                 let affected_note_count = transaction
                     .query_row(
@@ -107,17 +96,14 @@ impl TagsRepository {
                 params![id, name, now],
             )
             .map_err(|_| TagError::OperationFailed)?;
-        transaction
-            .commit()
-            .map_err(|_| TagError::OperationFailed)?;
         Ok(RenameTagResult {
-            tag: Some(find_tag(connection, id)?),
+            tag: Some(find_tag(transaction, id)?),
             merge_preview: None,
         })
     }
 
     pub fn merge(
-        connection: &mut Connection,
+        transaction: &rusqlite::Transaction<'_>,
         source_id: &str,
         target_id: &str,
         now: &str,
@@ -125,9 +111,6 @@ impl TagsRepository {
         if source_id == target_id {
             return Err(TagError::ValidationFailed);
         }
-        let transaction = connection
-            .transaction()
-            .map_err(|_| TagError::OperationFailed)?;
         let source_exists = transaction
             .query_row(
                 "SELECT 1 FROM tags WHERE id = ?1",
@@ -153,11 +136,11 @@ impl TagsRepository {
         transaction
             .execute("DELETE FROM tags WHERE id = ?1", params![source_id])
             .map_err(|_| TagError::OperationFailed)?;
-        transaction.commit().map_err(|_| TagError::OperationFailed)
+        Ok(())
     }
 
-    pub fn delete(connection: &mut Connection, id: &str) -> Result<(), TagError> {
-        let changed = connection
+    pub fn delete(transaction: &rusqlite::Transaction<'_>, id: &str) -> Result<(), TagError> {
+        let changed = transaction
             .execute("DELETE FROM tags WHERE id = ?1", params![id])
             .map_err(|_| TagError::OperationFailed)?;
         if changed == 0 {
@@ -167,15 +150,12 @@ impl TagsRepository {
     }
 
     pub fn set_note_tags(
-        connection: &mut Connection,
+        transaction: &rusqlite::Transaction<'_>,
         note_id: &str,
         tag_ids: &[String],
         now: &str,
     ) -> Result<(), TagError> {
         let unique: HashSet<&String> = tag_ids.iter().collect();
-        let transaction = connection
-            .transaction()
-            .map_err(|_| TagError::OperationFailed)?;
         let note_exists = transaction
             .query_row(
                 "SELECT 1 FROM notes WHERE id = ?1 AND is_deleted = 0",
@@ -211,7 +191,18 @@ impl TagsRepository {
                 )
                 .map_err(|_| TagError::OperationFailed)?;
         }
-        transaction.commit().map_err(|_| TagError::OperationFailed)
+        Ok(())
+    }
+
+    pub fn note_ids_for_tag(connection: &Connection, id: &str) -> Result<Vec<String>, TagError> {
+        let mut statement = connection
+            .prepare("SELECT note_id FROM note_tags WHERE tag_id = ?1")
+            .map_err(|_| TagError::OperationFailed)?;
+        statement
+            .query_map(params![id], |row| row.get(0))
+            .map_err(|_| TagError::OperationFailed)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| TagError::OperationFailed)
     }
 
     pub fn notes_by_tags(
@@ -222,42 +213,11 @@ impl TagsRepository {
         if tag_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let unique: HashSet<&String> = tag_ids.iter().collect();
-        let placeholders = (0..unique.len())
-            .map(|index| format!("?{}", index + 1))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let sql = format!(
-            "SELECT notes.id, notes.title, notes.content, COALESCE((SELECT group_concat(name, char(31)) FROM (SELECT tags.name FROM note_tags JOIN tags ON tags.id = note_tags.tag_id WHERE note_tags.note_id = notes.id ORDER BY tags.name COLLATE NOCASE ASC)), ''), notes.is_pinned, notes.created_at, notes.updated_at FROM notes JOIN note_tags ON note_tags.note_id = notes.id WHERE notes.is_deleted = 0 AND note_tags.tag_id IN ({placeholders}) GROUP BY notes.id HAVING COUNT(DISTINCT note_tags.tag_id) = ?{} ORDER BY notes.is_pinned DESC, {}",
-            unique.len() + 1,
-            note_sort.order_by_sql()
-        );
-        let mut selected_tag_ids = unique.iter().map(|id| (*id).clone()).collect::<Vec<_>>();
-        selected_tag_ids.sort_unstable();
-        let count = i64::try_from(selected_tag_ids.len()).map_err(|_| TagError::OperationFailed)?;
-        let mut values = selected_tag_ids
-            .into_iter()
-            .map(Value::Text)
-            .collect::<Vec<_>>();
-        values.push(Value::Integer(count));
-        let mut statement = connection
-            .prepare(&sql)
-            .map_err(|_| TagError::OperationFailed)?;
-        let rows = statement
-            .query_map(rusqlite::params_from_iter(values.iter()), |row| {
-                let content: String = row.get(2)?;
-                Ok(NoteSummary {
-                    id: row.get(0)?,
-                    title: row.get(1)?,
-                    content_preview: content_preview(&content),
-                    tag_names: tag_names_from_row(row.get(3)?),
-                    is_pinned: row.get(4)?,
-                    created_at: row.get(5)?,
-                    updated_at: row.get(6)?,
-                })
-            })
-            .map_err(|_| TagError::OperationFailed)?;
-        rows.collect::<Result<Vec<_>, _>>()
+        let request = crate::domain::notes::NoteListRequest {
+            tag_ids: Some(tag_ids.to_vec()),
+            ..Default::default()
+        };
+        crate::repositories::notes::NotesRepository::list_matching(connection, &request, note_sort)
             .map_err(|_| TagError::OperationFailed)
     }
 }
@@ -304,13 +264,4 @@ fn ensure_unique(
     } else {
         Ok(())
     }
-}
-fn content_preview(content: &str) -> String {
-    content
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .chars()
-        .take(160)
-        .collect()
 }

@@ -5,10 +5,11 @@ use crate::domain::trash::{TrashCleanupResult, TrashError, TrashedNoteSummary};
 pub struct TrashRepository;
 
 impl TrashRepository {
-    pub fn trash(connection: &mut Connection, id: &str, now: &str) -> Result<(), TrashError> {
-        let transaction = connection
-            .transaction()
-            .map_err(|_| TrashError::OperationFailed)?;
+    pub fn trash(
+        transaction: &rusqlite::Transaction<'_>,
+        id: &str,
+        now: &str,
+    ) -> Result<(), TrashError> {
         let category_id = transaction
             .query_row(
                 "SELECT category_id FROM notes WHERE id = ?1 AND is_deleted = 0",
@@ -20,7 +21,7 @@ impl TrashRepository {
             .ok_or(TrashError::NotFound)?;
         let category_path = category_id
             .as_deref()
-            .map(|category_id| category_path(&transaction, category_id))
+            .map(|category_id| category_path(transaction, category_id))
             .transpose()?;
         transaction
             .execute(
@@ -30,15 +31,13 @@ impl TrashRepository {
                 params![id, now, category_path],
             )
             .map_err(|_| TrashError::OperationFailed)?;
-        transaction
-            .commit()
-            .map_err(|_| TrashError::OperationFailed)
+        Ok(())
     }
 
     pub fn list(connection: &Connection) -> Result<Vec<TrashedNoteSummary>, TrashError> {
         let mut statement = connection
             .prepare(
-                "SELECT id, title, content, deleted_at, trashed_from_category_path
+                "SELECT id, title, content_preview, deleted_at, trashed_from_category_path
              FROM notes WHERE is_deleted = 1 ORDER BY deleted_at DESC, id DESC",
             )
             .map_err(|_| TrashError::OperationFailed)?;
@@ -48,7 +47,7 @@ impl TrashRepository {
                 Ok(TrashedNoteSummary {
                     id: row.get(0)?,
                     title: row.get(1)?,
-                    content_preview: content_preview(&content),
+                    content_preview: content,
                     deleted_at: row.get(3)?,
                     trashed_from_category_path: row.get(4)?,
                 })
@@ -58,10 +57,11 @@ impl TrashRepository {
             .map_err(|_| TrashError::OperationFailed)
     }
 
-    pub fn restore(connection: &mut Connection, id: &str, now: &str) -> Result<bool, TrashError> {
-        let transaction = connection
-            .transaction()
-            .map_err(|_| TrashError::OperationFailed)?;
+    pub fn restore(
+        transaction: &rusqlite::Transaction<'_>,
+        id: &str,
+        now: &str,
+    ) -> Result<bool, TrashError> {
         let original_category_id = transaction
             .query_row(
                 "SELECT trashed_from_category_id FROM notes WHERE id = ?1 AND is_deleted = 1",
@@ -92,20 +92,14 @@ impl TrashRepository {
                 params![id, if category_exists { 1 } else { 0 }, now],
             )
             .map_err(|_| TrashError::OperationFailed)?;
-        transaction
-            .commit()
-            .map_err(|_| TrashError::OperationFailed)?;
         Ok(original_category_id.is_some() && !category_exists)
     }
 
     pub fn permanently_delete(
-        connection: &mut Connection,
+        transaction: &rusqlite::Transaction<'_>,
         id: &str,
         now: &str,
     ) -> Result<TrashCleanupResult, TrashError> {
-        let transaction = connection
-            .transaction()
-            .map_err(|_| TrashError::OperationFailed)?;
         let exists = transaction
             .query_row(
                 "SELECT 1 FROM notes WHERE id = ?1 AND is_deleted = 1",
@@ -124,31 +118,35 @@ impl TrashRepository {
                 params![id],
             )
             .map_err(|_| TrashError::OperationFailed)?;
-        let queued = queue_unreferenced_assets(&transaction, now)?;
-        transaction
-            .commit()
-            .map_err(|_| TrashError::OperationFailed)?;
+        let queued = queue_unreferenced_assets(transaction, now)?;
         Ok(TrashCleanupResult {
             deleted_note_count: 1,
             pending_file_cleanup_count: queued,
         })
     }
 
-    pub fn empty(connection: &mut Connection, now: &str) -> Result<TrashCleanupResult, TrashError> {
-        let transaction = connection
-            .transaction()
-            .map_err(|_| TrashError::OperationFailed)?;
+    pub fn empty(
+        transaction: &rusqlite::Transaction<'_>,
+        now: &str,
+    ) -> Result<TrashCleanupResult, TrashError> {
         let deleted = transaction
             .execute("DELETE FROM notes WHERE is_deleted = 1", [])
             .map_err(|_| TrashError::OperationFailed)?;
-        let queued = queue_unreferenced_assets(&transaction, now)?;
-        transaction
-            .commit()
-            .map_err(|_| TrashError::OperationFailed)?;
+        let queued = queue_unreferenced_assets(transaction, now)?;
         Ok(TrashCleanupResult {
             deleted_note_count: u32::try_from(deleted).map_err(|_| TrashError::OperationFailed)?,
             pending_file_cleanup_count: queued,
         })
+    }
+    pub fn trashed_note_ids(connection: &Connection) -> Result<Vec<String>, TrashError> {
+        let mut statement = connection
+            .prepare("SELECT id FROM notes WHERE is_deleted = 1")
+            .map_err(|_| TrashError::OperationFailed)?;
+        statement
+            .query_map([], |row| row.get(0))
+            .map_err(|_| TrashError::OperationFailed)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| TrashError::OperationFailed)
     }
 }
 
@@ -200,14 +198,4 @@ fn category_path(
         )
         .optional()
         .map_err(|_| TrashError::OperationFailed)
-}
-
-fn content_preview(content: &str) -> String {
-    content
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .chars()
-        .take(160)
-        .collect()
 }

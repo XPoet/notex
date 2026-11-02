@@ -3,10 +3,15 @@ import { StateEffect, StateField } from '@codemirror/state'
 import type { EditorState } from '@codemirror/state'
 import { Decoration, EditorView, WidgetType } from '@codemirror/view'
 import type { DecorationSet } from '@codemirror/view'
-import { getNoteImageReferences } from '@/composables/useNoteImages'
-import type { NoteImage } from '@/composables/useNoteImages'
+import type { NoteImage, NoteImageReference } from '@/composables/useNoteImages'
 
 export const refreshImagePreviews = StateEffect.define<null>()
+export const replaceImageReferences = StateEffect.define<readonly NoteImageReference[]>()
+
+export interface ImagePreviewState {
+  references: readonly NoteImageReference[]
+  decorations: DecorationSet
+}
 
 class ImagePreviewWidget extends WidgetType {
   readonly language = locale.value
@@ -57,13 +62,14 @@ class ImagePreviewWidget extends WidgetType {
 
 export function imagePreviews(
   images: () => NoteImage[],
+  references: () => readonly NoteImageReference[],
   onPreview: (path: string) => void,
   onError: (path: string) => void,
-): StateField<DecorationSet> {
-  function decorations(state: EditorState): DecorationSet {
+): StateField<ImagePreviewState> {
+  function decorations(state: EditorState, items: readonly NoteImageReference[]): DecorationSet {
     const byPath = new Map(images().map((image) => [image.relativePath, image]))
     return Decoration.set(
-      getNoteImageReferences(state.doc.toString()).map((reference) => {
+      items.map((reference) => {
         const image = byPath.get(reference.relativePath)
         return Decoration.widget({
           widget: new ImagePreviewWidget(
@@ -82,14 +88,36 @@ export function imagePreviews(
     )
   }
 
-  return StateField.define<DecorationSet>({
-    create: decorations,
-    update(value, transaction) {
-      if (transaction.docChanged || transaction.effects.some((effect) => effect.is(refreshImagePreviews))) {
-        return decorations(transaction.state)
-      }
-      return value
+  return StateField.define<ImagePreviewState>({
+    create(state) {
+      return { references: references(), decorations: decorations(state, references()) }
     },
-    provide: (field) => EditorView.decorations.from(field),
+    update(value, transaction) {
+      let items = value.references
+      let mapped = value.decorations
+      if (transaction.docChanged) {
+        items = items
+          .filter((reference) => transaction.changes.touchesRange(reference.from, reference.to) !== 'cover')
+          .map((reference) => ({
+            ...reference,
+            from: transaction.changes.mapPos(reference.from, 1),
+            to: transaction.changes.mapPos(reference.to, -1),
+          }))
+        mapped = mapped.map(transaction.changes)
+      }
+      let rebuild = false
+      for (const effect of transaction.effects) {
+        if (effect.is(replaceImageReferences)) {
+          items = effect.value
+          rebuild = true
+        }
+        if (effect.is(refreshImagePreviews)) rebuild = true
+      }
+      if (rebuild) mapped = decorations(transaction.state, items)
+      return items === value.references && mapped === value.decorations
+        ? value
+        : { references: items, decorations: mapped }
+    },
+    provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
   })
 }

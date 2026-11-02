@@ -1,6 +1,8 @@
 use tauri::{AppHandle, Manager};
 
-use crate::domain::notes::{NoteCommandError, NoteDetail, NoteSummary};
+use crate::domain::notes::{
+    NoteCommandError, NoteDetail, NoteListRequest, NotePage, NoteSaveResult, NoteSummary,
+};
 use crate::services::notes::NotesService;
 
 #[tauri::command]
@@ -21,6 +23,14 @@ pub async fn list_notes(app: AppHandle) -> Result<Vec<NoteSummary>, NoteCommandE
 }
 
 #[tauri::command]
+pub async fn list_note_page(
+    app: AppHandle,
+    request: NoteListRequest,
+) -> Result<NotePage, NoteCommandError> {
+    run_blocking(app, move |service| service.page(request)).await
+}
+
+#[tauri::command]
 pub async fn get_note(app: AppHandle, id: String) -> Result<NoteDetail, NoteCommandError> {
     run_blocking(app, move |service| service.get(&id)).await
 }
@@ -31,7 +41,7 @@ pub async fn save_note(
     id: String,
     title: String,
     content: String,
-) -> Result<NoteDetail, NoteCommandError> {
+) -> Result<NoteSaveResult, NoteCommandError> {
     run_blocking(app, move |service| service.save(&id, &title, &content)).await
 }
 
@@ -45,7 +55,7 @@ pub async fn set_note_pinned(
 }
 
 #[tauri::command]
-pub async fn cleanup_empty_note(app: AppHandle, id: String) -> Result<(), NoteCommandError> {
+pub async fn cleanup_empty_note(app: AppHandle, id: String) -> Result<bool, NoteCommandError> {
     run_blocking(app, move |service| service.cleanup_empty(&id)).await
 }
 

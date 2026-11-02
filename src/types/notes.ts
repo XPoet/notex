@@ -26,6 +26,27 @@ export interface NoteSaveRequest {
   content: string
 }
 
+export interface NoteSaveResult {
+  id: string
+  updatedAt: string
+  summary: NoteSummary
+}
+
+export interface NoteListRequest {
+  categoryId?: string
+  uncategorized?: boolean
+  tagIds?: string[]
+  query?: string
+  offset?: number
+  limit?: number
+}
+
+export interface NotePage {
+  items: NoteSummary[]
+  total: number
+  nextOffset: number | null
+}
+
 export type NoteErrorCode =
   | 'NOTE_NOT_FOUND'
   | 'NOTE_VALIDATION_FAILED'

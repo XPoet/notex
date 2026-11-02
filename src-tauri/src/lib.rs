@@ -45,6 +45,7 @@ pub fn run() -> Result<(), tauri::Error> {
                 commands::notes::create_note,
                 commands::imports::import_note,
                 commands::notes::list_notes,
+                commands::notes::list_note_page,
                 commands::notes::get_note,
                 commands::notes::save_note,
                 commands::notes::set_note_pinned,

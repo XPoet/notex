@@ -1,5 +1,6 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { SearchPage } from '@/types/search'
 
 const searchService = vi.hoisted(() => ({
   rebuildSearchIndex: vi.fn(),
@@ -77,5 +78,47 @@ describe('search store', () => {
     expect(searchService.rebuildSearchIndex).toHaveBeenCalledOnce()
     expect(store.results).toHaveLength(1)
     expect(store.nextOffset).toBeNull()
+  })
+
+  it('切换查询时释放旧分页状态，并且旧分页结束不清理新分页的加载状态', async () => {
+    let resolveOldPage: ((value: SearchPage) => void) | undefined
+    let resolveNewSearch: ((value: SearchPage) => void) | undefined
+    let resolveNewPage: ((value: SearchPage) => void) | undefined
+    const oldPage = new Promise<SearchPage>((resolve) => {
+      resolveOldPage = resolve
+    })
+    const newSearch = new Promise<SearchPage>((resolve) => {
+      resolveNewSearch = resolve
+    })
+    const newPage = new Promise<SearchPage>((resolve) => {
+      resolveNewPage = resolve
+    })
+    searchService.searchNotes
+      .mockResolvedValueOnce(firstPage)
+      .mockReturnValueOnce(oldPage)
+      .mockReturnValueOnce(newSearch)
+      .mockReturnValueOnce(newPage)
+    const store = useSearchStore()
+
+    await store.search('旧查询')
+    const oldPagination = store.loadNext()
+    const currentSearch = store.search('新查询')
+    expect(store.isLoadingMore).toBe(false)
+    await store.loadNext()
+    expect(searchService.searchNotes).toHaveBeenCalledTimes(3)
+
+    resolveNewSearch?.({ ...firstPage, items: [{ ...firstPage.items[0], id: 'new-first' }] })
+    await currentSearch
+    const newPagination = store.loadNext()
+    expect(store.isLoadingMore).toBe(true)
+    resolveOldPage?.(firstPage)
+    await oldPagination
+    expect(store.isLoadingMore).toBe(true)
+    expect(store.results.map((item) => item.id)).toEqual(['new-first'])
+
+    resolveNewPage?.({ ...firstPage, items: [{ ...firstPage.items[0], id: 'new-second' }], nextOffset: null })
+    await newPagination
+    expect(store.isLoadingMore).toBe(false)
+    expect(store.results.map((item) => item.id)).toEqual(['new-first', 'new-second'])
   })
 })

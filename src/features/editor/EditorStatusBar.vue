@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { t } from '@/i18n'
-import { computed } from 'vue'
+import { onBeforeUnmount, shallowRef, watch } from 'vue'
 import SaveStatus from './SaveStatus.vue'
+import { countContent } from './contentStatistics'
 import type { SaveStatus as SaveStatusType } from '@/stores/notes'
 
 const props = defineProps<{
@@ -14,24 +15,30 @@ const emit = defineEmits<{
   retry: []
 }>()
 
-const wordCount = computed(() => countWords(props.content))
-const characterCount = computed(() => Array.from(props.content.replace(/\s/g, '')).length)
-const lineCount = computed(() => (props.content === '' ? 1 : props.content.split(/\r\n|\r|\n/).length))
-
-function countWords(content: string): number {
-  const cjkCharacterCount = (content.match(/[\u3400-\u9fff]/g) ?? []).length
-  const latinWordCount = content.replace(/[\u3400-\u9fff]/g, ' ').match(/[A-Za-z0-9_]+/g)?.length ?? 0
-
-  return cjkCharacterCount + latinWordCount
-}
+const statistics = shallowRef(countContent(props.content))
+let timer: ReturnType<typeof setTimeout> | undefined
+watch(
+  () => props.content,
+  () => {
+    // Trailing throttle: continuous typing still updates at most every 200 ms.
+    if (timer !== undefined) return
+    timer = setTimeout(() => {
+      timer = undefined
+      statistics.value = countContent(props.content)
+    }, 200)
+  },
+)
+onBeforeUnmount(() => {
+  if (timer !== undefined) clearTimeout(timer)
+})
 </script>
 
 <template>
   <footer class="editor-status-bar">
     <div class="editor-status-bar__statistics">
-      <span>{{ t('字数 {value1}', { value1: wordCount }) }}</span>
-      <span>{{ t('字符 {value1}', { value1: characterCount }) }}</span>
-      <span>{{ t('行 {value1}', { value1: lineCount }) }}</span>
+      <span>{{ t('字数 {value1}', { value1: statistics.words }) }}</span>
+      <span>{{ t('字符 {value1}', { value1: statistics.characters }) }}</span>
+      <span>{{ t('行 {value1}', { value1: statistics.lines }) }}</span>
     </div>
     <div class="editor-status-bar__save-state">
       <SaveStatus :status="saveStatus" :message="saveError" />

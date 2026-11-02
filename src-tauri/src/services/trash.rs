@@ -24,10 +24,11 @@ impl TrashService {
     }
 
     pub fn trash(&self, id: &str) -> Result<(), TrashError> {
-        let mut connection =
-            open_database(&self.database_path).map_err(|_| TrashError::OperationFailed)?;
-        TrashRepository::trash(&mut connection, id, &current_time()?)?;
-        SearchRepository::rebuild_index(&mut connection).map_err(|_| TrashError::OperationFailed)
+        self.write(|transaction| {
+            TrashRepository::trash(transaction, id, &current_time()?)?;
+            SearchRepository::remove_note_in_transaction(transaction, id)
+                .map_err(|_| TrashError::OperationFailed)
+        })
     }
 
     pub fn list(&self) -> Result<Vec<TrashedNoteSummary>, TrashError> {
@@ -37,27 +38,26 @@ impl TrashService {
     }
 
     pub fn restore(&self, id: &str) -> Result<RestoreNoteResult, TrashError> {
-        let mut connection =
-            open_database(&self.database_path).map_err(|_| TrashError::OperationFailed)?;
-        let restored_to_uncategorized =
-            TrashRepository::restore(&mut connection, id, &current_time()?)?;
-        SearchRepository::rebuild_index(&mut connection)
-            .map_err(|_| TrashError::OperationFailed)?;
-        let note: NoteDetail = NotesRepository::find_detail(&connection, id)
-            .map_err(|_| TrashError::OperationFailed)?;
-        Ok(RestoreNoteResult {
-            note,
-            restored_to_uncategorized,
+        self.write(|transaction| {
+            let restored_to_uncategorized =
+                TrashRepository::restore(transaction, id, &current_time()?)?;
+            SearchRepository::refresh_note_in_transaction(transaction, id)
+                .map_err(|_| TrashError::OperationFailed)?;
+            let note: NoteDetail = NotesRepository::find_detail(transaction, id)
+                .map_err(|_| TrashError::OperationFailed)?;
+            Ok(RestoreNoteResult {
+                note,
+                restored_to_uncategorized,
+            })
         })
     }
 
     pub fn permanently_delete(&self, id: &str) -> Result<TrashCleanupResult, TrashError> {
-        let mut connection =
-            open_database(&self.database_path).map_err(|_| TrashError::OperationFailed)?;
-        let mut result =
-            TrashRepository::permanently_delete(&mut connection, id, &current_time()?)?;
-        SearchRepository::rebuild_index(&mut connection)
-            .map_err(|_| TrashError::OperationFailed)?;
+        let mut result = self.write(|transaction| {
+            SearchRepository::remove_note_in_transaction(transaction, id)
+                .map_err(|_| TrashError::OperationFailed)?;
+            TrashRepository::permanently_delete(transaction, id, &current_time()?)
+        })?;
         result.pending_file_cleanup_count = AssetsService::new(&self.data_directory)
             .cleanup_pending()
             .map_err(|_| TrashError::OperationFailed)?;
@@ -65,13 +65,31 @@ impl TrashService {
     }
 
     pub fn empty(&self) -> Result<TrashCleanupResult, TrashError> {
-        let mut connection =
-            open_database(&self.database_path).map_err(|_| TrashError::OperationFailed)?;
-        let mut result = TrashRepository::empty(&mut connection, &current_time()?)?;
-        SearchRepository::rebuild_index(&mut connection)
-            .map_err(|_| TrashError::OperationFailed)?;
+        let mut result = self.write(|transaction| {
+            for id in TrashRepository::trashed_note_ids(transaction)? {
+                SearchRepository::remove_note_in_transaction(transaction, &id)
+                    .map_err(|_| TrashError::OperationFailed)?;
+            }
+            TrashRepository::empty(transaction, &current_time()?)
+        })?;
         result.pending_file_cleanup_count = AssetsService::new(&self.data_directory)
             .cleanup_pending()
+            .map_err(|_| TrashError::OperationFailed)?;
+        Ok(result)
+    }
+
+    fn write<T>(
+        &self,
+        operation: impl FnOnce(&rusqlite::Transaction<'_>) -> Result<T, TrashError>,
+    ) -> Result<T, TrashError> {
+        let mut connection =
+            open_database(&self.database_path).map_err(|_| TrashError::OperationFailed)?;
+        let transaction = connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(|_| TrashError::OperationFailed)?;
+        let result = operation(&transaction)?;
+        transaction
+            .commit()
             .map_err(|_| TrashError::OperationFailed)?;
         Ok(result)
     }

@@ -31,43 +31,71 @@ impl TagsService {
     }
     pub fn create(&self, name: &str) -> Result<TagSummary, TagError> {
         let name = normalized_name(name)?;
-        let mut connection =
-            open_database(&self.database_path).map_err(|_| TagError::OperationFailed)?;
-        let tag = TagsRepository::create(
-            &mut connection,
-            &Uuid::new_v4().to_string(),
-            &name,
-            &current_time()?,
-        )?;
-        SearchRepository::rebuild_index(&mut connection).map_err(|_| TagError::OperationFailed)?;
-        Ok(tag)
+        self.write(|transaction| {
+            TagsRepository::create(
+                transaction,
+                &Uuid::new_v4().to_string(),
+                &name,
+                &current_time()?,
+            )
+        })
     }
+
     pub fn rename(&self, id: &str, name: &str) -> Result<RenameTagResult, TagError> {
         let name = normalized_name(name)?;
+        self.write(|transaction| {
+            let affected = TagsRepository::note_ids_for_tag(transaction, id)?;
+            let result = TagsRepository::rename(transaction, id, &name, &current_time()?)?;
+            if result.tag.is_some() {
+                SearchRepository::refresh_notes_in_transaction(transaction, &affected)
+                    .map_err(|_| TagError::OperationFailed)?;
+            }
+            Ok(result)
+        })
+    }
+
+    pub fn merge(&self, source_id: &str, target_id: &str) -> Result<(), TagError> {
+        self.write(|transaction| {
+            let affected = TagsRepository::note_ids_for_tag(transaction, source_id)?;
+            TagsRepository::merge(transaction, source_id, target_id, &current_time()?)?;
+            SearchRepository::refresh_notes_in_transaction(transaction, &affected)
+                .map_err(|_| TagError::OperationFailed)
+        })
+    }
+
+    pub fn delete(&self, id: &str) -> Result<(), TagError> {
+        self.write(|transaction| {
+            let affected = TagsRepository::note_ids_for_tag(transaction, id)?;
+            TagsRepository::delete(transaction, id)?;
+            SearchRepository::refresh_notes_in_transaction(transaction, &affected)
+                .map_err(|_| TagError::OperationFailed)
+        })
+    }
+
+    pub fn set_note_tags(&self, note_id: &str, tag_ids: &[String]) -> Result<(), TagError> {
+        self.write(|transaction| {
+            TagsRepository::set_note_tags(transaction, note_id, tag_ids, &current_time()?)?;
+            SearchRepository::refresh_note_in_transaction(transaction, note_id)
+                .map_err(|_| TagError::OperationFailed)
+        })
+    }
+
+    fn write<T>(
+        &self,
+        operation: impl FnOnce(&rusqlite::Transaction<'_>) -> Result<T, TagError>,
+    ) -> Result<T, TagError> {
         let mut connection =
             open_database(&self.database_path).map_err(|_| TagError::OperationFailed)?;
-        let result = TagsRepository::rename(&mut connection, id, &name, &current_time()?)?;
-        SearchRepository::rebuild_index(&mut connection).map_err(|_| TagError::OperationFailed)?;
+        let transaction = connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(|_| TagError::OperationFailed)?;
+        let result = operation(&transaction)?;
+        transaction
+            .commit()
+            .map_err(|_| TagError::OperationFailed)?;
         Ok(result)
     }
-    pub fn merge(&self, source_id: &str, target_id: &str) -> Result<(), TagError> {
-        let mut connection =
-            open_database(&self.database_path).map_err(|_| TagError::OperationFailed)?;
-        TagsRepository::merge(&mut connection, source_id, target_id, &current_time()?)?;
-        SearchRepository::rebuild_index(&mut connection).map_err(|_| TagError::OperationFailed)
-    }
-    pub fn delete(&self, id: &str) -> Result<(), TagError> {
-        let mut connection =
-            open_database(&self.database_path).map_err(|_| TagError::OperationFailed)?;
-        TagsRepository::delete(&mut connection, id)?;
-        SearchRepository::rebuild_index(&mut connection).map_err(|_| TagError::OperationFailed)
-    }
-    pub fn set_note_tags(&self, note_id: &str, tag_ids: &[String]) -> Result<(), TagError> {
-        let mut connection =
-            open_database(&self.database_path).map_err(|_| TagError::OperationFailed)?;
-        TagsRepository::set_note_tags(&mut connection, note_id, tag_ids, &current_time()?)?;
-        SearchRepository::rebuild_index(&mut connection).map_err(|_| TagError::OperationFailed)
-    }
+
     pub fn notes_by_tags(&self, tag_ids: &[String]) -> Result<Vec<NoteSummary>, TagError> {
         let connection =
             open_database(&self.database_path).map_err(|_| TagError::OperationFailed)?;

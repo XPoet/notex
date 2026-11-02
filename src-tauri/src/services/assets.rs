@@ -77,6 +77,41 @@ impl AssetsService {
         note_id: &str,
         relative_path: &str,
     ) -> Result<Vec<u8>, AssetError> {
+        let bytes = self.read_note_image_bytes(note_id, relative_path)?;
+        let mut reader = ImageReader::new(std::io::Cursor::new(&bytes))
+            .with_guessed_format()
+            .map_err(|_| AssetError::ReadFailed)?;
+        let mut limits = Limits::default();
+        limits.max_image_width = Some(32_768);
+        limits.max_image_height = Some(32_768);
+        limits.max_alloc = Some(256 * 1024 * 1024);
+        reader.limits(limits);
+        // Inspect dimensions without decoding the original into another pixel buffer.
+        let (width, height) = reader
+            .into_dimensions()
+            .map_err(|_| AssetError::ReadFailed)?;
+        let encoded_size = u64::try_from(bytes.len()).map_err(|_| AssetError::ReadFailed)?;
+        let memory_cost = u64::from(width)
+            .checked_mul(u64::from(height))
+            .and_then(|pixels| pixels.checked_mul(4))
+            .and_then(|decoded_size| decoded_size.checked_add(encoded_size))
+            .ok_or(AssetError::ReadFailed)?;
+        if width == 0
+            || height == 0
+            || width > 32_768
+            || height > 32_768
+            || memory_cost > 24 * 1024 * 1024
+        {
+            return Err(AssetError::ReadFailed);
+        }
+        Ok(bytes)
+    }
+
+    fn read_note_image_bytes(
+        &self,
+        note_id: &str,
+        relative_path: &str,
+    ) -> Result<Vec<u8>, AssetError> {
         let connection =
             open_database(&self.database_path).map_err(|_| AssetError::StorageUnavailable)?;
         if !AssetsRepository::is_linked(&connection, note_id, relative_path)? {
@@ -103,6 +138,33 @@ impl AssetsService {
             return Err(AssetError::ReadFailed);
         }
         Ok(bytes)
+    }
+
+    pub fn read_note_thumbnail(
+        &self,
+        note_id: &str,
+        relative_path: &str,
+    ) -> Result<Vec<u8>, AssetError> {
+        let bytes = self.read_note_image_bytes(note_id, relative_path)?;
+        let mut reader = ImageReader::new(std::io::Cursor::new(bytes))
+            .with_guessed_format()
+            .map_err(|_| AssetError::ReadFailed)?;
+        let mut limits = Limits::default();
+        limits.max_image_width = Some(32_768);
+        limits.max_image_height = Some(32_768);
+        limits.max_alloc = Some(256 * 1024 * 1024);
+        reader.limits(limits);
+        let image = reader.decode().map_err(|_| AssetError::ReadFailed)?;
+        let thumbnail = if image.width() > 1280 || image.height() > 1280 {
+            image.thumbnail(1280, 1280)
+        } else {
+            image
+        };
+        let mut output = std::io::Cursor::new(Vec::new());
+        thumbnail
+            .write_to(&mut output, image::ImageFormat::Png)
+            .map_err(|_| AssetError::ReadFailed)?;
+        Ok(output.into_inner())
     }
 
     pub fn cleanup_pending(&self) -> Result<u32, AssetError> {
