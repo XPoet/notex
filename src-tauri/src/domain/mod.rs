@@ -1,3 +1,4 @@
+pub mod asset_references;
 pub mod assets;
 pub mod bootstrap;
 pub mod categories;

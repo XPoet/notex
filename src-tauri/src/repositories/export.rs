@@ -18,6 +18,7 @@ pub struct ExportAsset {
     pub id: String,
     pub relative_path: String,
     pub file_name: String,
+    pub original_name: String,
 }
 
 #[derive(Debug, Clone)]
@@ -279,7 +280,7 @@ fn attach_assets(connection: &Connection, notes: &mut [ExportNote]) -> Result<()
             .collect::<Vec<_>>()
             .join(", ");
         let sql = format!(
-            "SELECT note_assets.note_id, assets.id, assets.relative_path, assets.file_name
+            "SELECT note_assets.note_id, assets.id, assets.relative_path, assets.file_name, COALESCE(assets.original_name, assets.file_name)
              FROM note_assets INNER JOIN assets ON assets.id = note_assets.asset_id
              WHERE note_assets.note_id IN ({placeholders})
              ORDER BY note_assets.note_id, assets.id"
@@ -299,6 +300,7 @@ fn attach_assets(connection: &Connection, notes: &mut [ExportNote]) -> Result<()
                         id: row.get(1)?,
                         relative_path: row.get(2)?,
                         file_name: row.get(3)?,
+                        original_name: row.get(4)?,
                     },
                 ))
             })

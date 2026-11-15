@@ -8,6 +8,7 @@ import type { NoteDetail } from '@/types/notes'
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke }))
 import WorkbenchView from '@/views/WorkbenchView.vue'
+import NoteEditor from '@/features/editor/NoteEditor.vue'
 import { useNotesStore } from '@/stores/notes'
 let records: NoteDetail[]
 let failure: unknown
@@ -73,6 +74,17 @@ async function host() {
 }
 
 describe('工作台路由保存屏障', () => {
+  it('离开后返回工作台，已有选中会话仍显示正文', async () => {
+    const { wrapper, router, store } = await host()
+    await router.push({ name: 'settings' })
+    await router.push({ name: 'workbench', query: { category: 'a' } })
+    await flushPromises()
+
+    expect(store.selectedNote?.id).toBe('a')
+    expect(wrapper.getComponent(NoteEditor).props('note')?.id).toBe('a')
+    wrapper.unmount()
+  })
+
   it('在一秒自动保存之前离开工作台仍保存草稿', async () => {
     const { wrapper, router, store } = await host()
     store.updateDraft({ title: '新标题', content: '马上离开前的输入' })

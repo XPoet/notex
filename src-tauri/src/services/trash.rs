@@ -142,7 +142,7 @@ mod tests {
     }
 
     #[test]
-    fn keeps_shared_asset_until_its_last_note_is_permanently_deleted()
+    fn deleting_one_note_preserves_the_other_notes_independent_copy()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = data_directory();
         BootstrapRepository::initialize(&directory.join("database").join("notex.db"))?;
@@ -152,16 +152,17 @@ mod tests {
         let assets = AssetsService::new(&directory);
         let image = valid_png()?;
         let saved = assets.save_pasted_image(&first.id, &image)?;
-        assets.save_pasted_image(&second.id, &image)?;
+        let other = assets.save_pasted_image(&second.id, &image)?;
         let file_path = directory.join(&saved.relative_path);
         let trash = TrashService::new(&directory);
 
         trash.trash(&first.id)?;
         trash.permanently_delete(&first.id)?;
-        assert!(file_path.is_file());
+        assert!(!file_path.exists());
+        assert!(directory.join(&other.relative_path).is_file());
         trash.trash(&second.id)?;
         trash.permanently_delete(&second.id)?;
-        assert!(!file_path.exists());
+        assert!(!directory.join(&other.relative_path).exists());
         Ok(())
     }
 

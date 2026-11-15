@@ -1,5 +1,6 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
+import 'element-plus/es/components/dropdown/style/index'
 import 'element-plus/es/components/message/style/index'
 import 'element-plus/es/components/message-box/style/index'
 import App from './App.vue'

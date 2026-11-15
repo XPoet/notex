@@ -3,6 +3,62 @@ import { describe, expect, it } from 'vitest'
 import NoteListItem from '@/features/notes/NoteListItem.vue'
 
 describe('NoteListItem', () => {
+  it.each([
+    { gesture: '右键', button: 2, ctrlKey: false },
+    { gesture: 'Control + 点击', button: 0, ctrlKey: true },
+  ])('$gesture 在按下鼠标时阻止原生选字，仍能请求打开菜单', async ({ button, ctrlKey }) => {
+    const wrapper = mount(NoteListItem, {
+      props: {
+        note: {
+          id: 'context-note',
+          title: 'JetBrains IDE',
+          contentPreview: '推荐插件：PathMark - AutoCorrect',
+          tagNames: [],
+          isPinned: false,
+          createdAt: '2026-11-15T00:00:00Z',
+          updatedAt: '2026-11-15T00:00:00Z',
+        },
+        selected: false,
+        searchQuery: 'AutoCorrect',
+      },
+    })
+    const text = wrapper.get('.note-list-item-preview mark')
+    const mouseDown = new MouseEvent('mousedown', { button, ctrlKey, bubbles: true, cancelable: true })
+    text.element.dispatchEvent(mouseDown)
+
+    expect(mouseDown.defaultPrevented).toBe(true)
+    expect(wrapper.emitted('select')).toBeUndefined()
+    await text.trigger('contextmenu', { button: 2 })
+    expect(wrapper.emitted('contextMenu')?.[0]?.[0]).toBe('context-note')
+    expect(wrapper.emitted('select')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('保留普通左键按下的默认行为和点击选择', async () => {
+    const wrapper = mount(NoteListItem, {
+      props: {
+        note: {
+          id: 'primary-note',
+          title: '普通笔记',
+          contentPreview: '摘要',
+          tagNames: [],
+          isPinned: false,
+          createdAt: '2026-11-15T00:00:00Z',
+          updatedAt: '2026-11-15T00:00:00Z',
+        },
+        selected: false,
+      },
+    })
+    const mouseDown = new MouseEvent('mousedown', { button: 0, bubbles: true, cancelable: true })
+    wrapper.element.dispatchEvent(mouseDown)
+
+    expect(mouseDown.defaultPrevented).toBe(false)
+    await wrapper.trigger('click')
+    expect(wrapper.emitted('select')).toEqual([['primary-note']])
+    expect(wrapper.emitted('contextMenu')).toBeUndefined()
+    wrapper.unmount()
+  })
+
   it('标题和摘要高亮多个关键词，保留原始文字，切换及清空关键词后同步更新', async () => {
     const note = {
       id: 'search-note',

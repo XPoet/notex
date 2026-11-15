@@ -128,11 +128,8 @@ impl ExportService {
         let snapshot = ExportRepository::snapshot(&mut connection, &request.scope)?;
         let total = u32::try_from(snapshot.notes.len()).map_err(|_| ExportError::Validation)?;
         let (output_directory, directory_label) = create_output_directory(&target_directory)?;
-        fs::create_dir(output_directory.join("assets")).map_err(|_| ExportError::Write)?;
 
         let mut layout = ExportLayout::new(output_directory.clone());
-        let mut copied_asset_ids = HashSet::new();
-        let mut copied_asset_names = HashSet::new();
         let mut issues = Vec::new();
         let mut exported_count = 0;
         let mut failed_count = 0;
@@ -156,8 +153,6 @@ impl ExportService {
                 &request.scope.id,
                 &snapshot.scope_label,
                 &mut layout,
-                &mut copied_asset_ids,
-                &mut copied_asset_names,
                 &mut issues,
             ) {
                 Ok(()) => exported_count += 1,
@@ -193,7 +188,6 @@ impl ExportService {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn export_note(
         &self,
         note: &ExportNote,
@@ -201,53 +195,29 @@ impl ExportService {
         scope_id: &str,
         scope_label: &str,
         layout: &mut ExportLayout,
-        copied_asset_ids: &mut HashSet<String>,
-        copied_asset_names: &mut HashSet<String>,
         issues: &mut Vec<ExportIssue>,
     ) -> Result<(), ExportError> {
         let markdown_directory =
             layout.markdown_directory(scope_kind, scope_id, scope_label, &note.category_path)?;
-        fs::create_dir_all(&markdown_directory).map_err(|_| ExportError::Write)?;
-        let markdown_path = layout.markdown_path(&markdown_directory, &note.title, &note.id)?;
-        let mut content = note.content.clone();
-        for asset in &note.assets {
-            let target_file_name = controlled_asset_file_name(asset)?;
-            let relative_path =
-                asset_reference(&markdown_path, &layout.output_directory, target_file_name)?;
-            content = replace_asset_reference(&content, &asset.relative_path, &relative_path);
-            if !copied_asset_ids.contains(&asset.id) {
-                let source_path = self.assets_directory.join(target_file_name);
-                let target_path = layout
-                    .output_directory
-                    .join("assets")
-                    .join(target_file_name);
-                if !source_path.is_file() {
-                    copied_asset_ids.insert(asset.id.clone());
-                    issues.push(ExportIssue {
-                        note_id: Some(note.id.clone()),
-                        title: display_title(&note.title, &note.id),
-                        code: "EXPORT_ASSET_MISSING".to_owned(),
-                        message: "关联图片资源缺失，已导出 Markdown 引用。".to_owned(),
-                    });
-                    continue;
-                }
-                let canonical_assets_directory = self
-                    .assets_directory
-                    .canonicalize()
-                    .map_err(|_| ExportError::Write)?;
-                let canonical_source_path =
-                    source_path.canonicalize().map_err(|_| ExportError::Write)?;
-                if !canonical_source_path.starts_with(&canonical_assets_directory) {
-                    return Err(ExportError::Write);
-                }
-                if !copied_asset_names.insert(target_file_name.to_owned()) {
-                    return Err(ExportError::Write);
-                }
-                copy_new_file_atomically(&canonical_source_path, &target_path)?;
-                copied_asset_ids.insert(asset.id.clone());
+        let plan = layout.plan_note(&markdown_directory, note)?;
+        let parent = plan.markdown_path.parent().ok_or(ExportError::Write)?;
+        fs::create_dir_all(parent).map_err(|_| ExportError::Write)?;
+        for asset in plan.assets {
+            let source = crate::services::assets::resolve_asset_path(
+                &self.assets_directory,
+                &asset.source.relative_path,
+            );
+            match source {
+                Ok(source) => copy_new_file_atomically(&source, &asset.target)?,
+                Err(_) => issues.push(ExportIssue {
+                    note_id: Some(note.id.clone()),
+                    title: display_title(&note.title, &note.id),
+                    code: "EXPORT_ASSET_MISSING".to_owned(),
+                    message: "附件缺失或路径无效，已保留 Markdown 引用。".to_owned(),
+                }),
             }
         }
-        write_new_file_atomically(&markdown_path, content.as_bytes())
+        write_new_file_atomically(&plan.markdown_path, plan.content.as_bytes())
     }
 }
 
@@ -255,20 +225,15 @@ pub(super) struct ExportLayout {
     output_directory: PathBuf,
     category_directories: HashMap<String, PathBuf>,
     directory_names: HashMap<PathBuf, HashSet<String>>,
-    file_names: HashMap<PathBuf, HashSet<String>>,
 }
 
 impl ExportLayout {
     pub(super) fn new(output_directory: PathBuf) -> Self {
-        let directory_names = HashMap::from([(
-            output_directory.clone(),
-            HashSet::from(["assets".to_owned()]),
-        )]);
+        let directory_names = HashMap::new();
         Self {
             output_directory,
             category_directories: HashMap::new(),
             directory_names,
-            file_names: HashMap::new(),
         }
     }
 
@@ -294,6 +259,79 @@ impl ExportLayout {
                 Ok(current)
             }
         }
+    }
+
+    pub(super) fn plan_note<'a>(
+        &mut self,
+        directory: &Path,
+        note: &'a ExportNote,
+    ) -> Result<NoteExportPlan<'a>, ExportError> {
+        let references = crate::domain::asset_references::references(&note.content);
+        let used: HashSet<_> = references.iter().map(|reference| reference.path).collect();
+        let attachments: Vec<_> = note
+            .assets
+            .iter()
+            .filter(|asset| used.contains(asset.relative_path.as_str()))
+            .collect();
+        let directory = if attachments.is_empty() {
+            directory.to_path_buf()
+        } else {
+            self.named_directory(directory, &note.id, &note.title)?
+        };
+        let markdown_path = self.markdown_path(&directory, &note.title, &note.id)?;
+        let mut names = HashSet::from([markdown_path
+            .file_name()
+            .ok_or(ExportError::Write)?
+            .to_string_lossy()
+            .to_lowercase()]);
+        let mut replacements = HashMap::new();
+        let mut assets = Vec::new();
+        for asset in attachments {
+            if !crate::domain::asset_references::is_managed_path(&asset.relative_path)
+                || Path::new(&asset.relative_path)
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    != Some(asset.file_name.as_str())
+            {
+                return Err(ExportError::Write);
+            }
+            let extension = Path::new(&asset.file_name)
+                .extension()
+                .and_then(|value| value.to_str())
+                .ok_or(ExportError::Write)?;
+            let original_extension = Path::new(&asset.original_name)
+                .extension()
+                .and_then(|value| value.to_str());
+            let extension = original_extension
+                .filter(|value| {
+                    value.eq_ignore_ascii_case(extension)
+                        || (value.eq_ignore_ascii_case("jpeg")
+                            && extension.eq_ignore_ascii_case("jpg"))
+                })
+                .unwrap_or(extension);
+            let stem = Path::new(&asset.original_name)
+                .file_stem()
+                .and_then(|value| value.to_str())
+                .unwrap_or(&asset.id);
+            let base = sanitize_file_name(stem, &asset.id);
+            let name = unique_name(&mut names, &base, &asset.id, &format!(".{extension}"));
+            replacements.insert(asset.relative_path.as_str(), encoded_reference(&name));
+            assets.push(PlannedAsset {
+                source: asset,
+                target: directory.join(&name),
+            });
+        }
+        let mut content = note.content.clone();
+        for reference in references.into_iter().rev() {
+            if let Some(target) = replacements.get(reference.path) {
+                content.replace_range(reference.target, target);
+            }
+        }
+        Ok(NoteExportPlan {
+            markdown_path,
+            content,
+            assets,
+        })
     }
 
     fn category_directory(
@@ -332,7 +370,10 @@ impl ExportLayout {
         title: &str,
         note_id: &str,
     ) -> Result<PathBuf, ExportError> {
-        let names = self.file_names.entry(directory.to_path_buf()).or_default();
+        let names = self
+            .directory_names
+            .entry(directory.to_path_buf())
+            .or_default();
         let base = sanitize_file_name(title, note_id);
         let file_name = unique_name(names, &base, note_id, ".md");
         Ok(directory.join(file_name))
@@ -397,47 +438,27 @@ fn create_output_directory(target_directory: &Path) -> Result<(PathBuf, String),
     Err(ExportError::TargetUnavailable)
 }
 
-pub(super) fn controlled_asset_file_name(asset: &ExportAsset) -> Result<&str, ExportError> {
-    let expected_relative_path = format!("assets/{}", asset.file_name);
-    let file_name = Path::new(&asset.file_name)
-        .file_name()
-        .and_then(|value| value.to_str())
-        .filter(|value| *value == asset.file_name)
-        .filter(|value| !value.is_empty())
-        .ok_or(ExportError::Write)?;
-    if asset.relative_path != expected_relative_path {
-        return Err(ExportError::Write);
-    }
-    Ok(file_name)
+pub(super) struct PlannedAsset<'a> {
+    pub source: &'a ExportAsset,
+    pub target: PathBuf,
 }
 
-pub(super) fn asset_reference(
-    markdown_path: &Path,
-    output_directory: &Path,
-    file_name: &str,
-) -> Result<String, ExportError> {
-    let markdown_directory = markdown_path.parent().ok_or(ExportError::Write)?;
-    let relative_directory = markdown_directory
-        .strip_prefix(output_directory)
-        .map_err(|_| ExportError::Write)?;
-    let depth = relative_directory.components().count();
-    if depth == 0 {
-        return Ok(format!("./assets/{file_name}"));
-    }
-    Ok(format!("{}assets/{file_name}", "../".repeat(depth)))
+pub(super) struct NoteExportPlan<'a> {
+    pub markdown_path: PathBuf,
+    pub content: String,
+    pub assets: Vec<PlannedAsset<'a>>,
 }
 
-pub(super) fn replace_asset_reference(
-    content: &str,
-    source_relative_path: &str,
-    target_relative_path: &str,
-) -> String {
-    let source_with_dot = format!("](./{source_relative_path})");
-    let source_without_dot = format!("]({source_relative_path})");
-    let target = format!("]({target_relative_path})");
-    content
-        .replace(&source_with_dot, &target)
-        .replace(&source_without_dot, &target)
+fn encoded_reference(name: &str) -> String {
+    let mut result = String::from("./");
+    for byte in name.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
+            result.push(char::from(byte));
+        } else {
+            result.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    result
 }
 
 fn write_new_file_atomically(path: &Path, bytes: &[u8]) -> Result<(), ExportError> {
@@ -491,6 +512,10 @@ fn sanitize_file_name(value: &str, identifier: &str) -> String {
         .trim_end_matches(['.', ' '])
         .chars()
         .take(96)
+        .scan(0, |length, character| {
+            *length += character.len_utf8();
+            (*length <= 180).then_some(character)
+        })
         .collect::<String>();
     let base = if truncated.is_empty() || truncated == "." || truncated == ".." {
         format!("无标题笔记-{}", short_identifier(identifier))
@@ -511,12 +536,12 @@ fn unique_name(
     extension: &str,
 ) -> String {
     let initial = format!("{base}{extension}");
-    if names.insert(initial.clone()) {
+    if names.insert(initial.to_lowercase()) {
         return initial;
     }
     for suffix in 2..=10_000 {
         let candidate = format!("{base}-{suffix}{extension}");
-        if names.insert(candidate.clone()) {
+        if names.insert(candidate.to_lowercase()) {
             return candidate;
         }
     }
@@ -582,7 +607,8 @@ mod tests {
     use crate::domain::export::{ExportRequest, ExportScope, ExportScopeKind};
     use crate::repositories::bootstrap::BootstrapRepository;
 
-    use super::{ExportService, ExportTaskRegistry, replace_asset_reference, sanitize_file_name};
+    use super::{ExportService, ExportTaskRegistry, sanitize_file_name};
+    use crate::domain::asset_references::replace as replace_asset_reference;
 
     fn data_directory() -> std::path::PathBuf {
         let timestamp = SystemTime::now()
@@ -638,14 +664,17 @@ mod tests {
                 .join(&result.directory_label)
                 .join("工作")
                 .join("项目 A")
+                .join("接口说明")
                 .join("接口说明.md"),
         )?;
-        assert!(markdown.contains("../../assets/image.png"));
+        assert!(markdown.contains("./image.png"));
         assert_eq!(
             fs::read(
                 target_directory
                     .join(&result.directory_label)
-                    .join("assets")
+                    .join("工作")
+                    .join("项目 A")
+                    .join("接口说明")
                     .join("image.png"),
             )?,
             b"png"
@@ -718,10 +747,10 @@ mod tests {
         BootstrapRepository::initialize(&database_path)?;
         let connection = open_database(&database_path)?;
         connection.execute("INSERT INTO tags (id, name, created_at, updated_at) VALUES ('tag', '资料', '2026-07-24T00:00:00Z', '2026-07-24T00:00:00Z')", [])?;
-        connection.execute("INSERT INTO notes (id, title, content, created_at, updated_at) VALUES ('bad', '失败项', '', '2026-07-24T00:00:00Z', '2026-07-24T00:00:00Z')", [])?;
+        connection.execute("INSERT INTO notes (id, title, content, created_at, updated_at) VALUES ('bad', '失败项', '![bad](./assets/bad.png)', '2026-07-24T00:00:00Z', '2026-07-24T00:00:00Z')", [])?;
         connection.execute("INSERT INTO notes (id, title, content, created_at, updated_at) VALUES ('good', '成功项', '正文', '2026-07-24T00:00:00Z', '2026-07-24T00:00:00Z')", [])?;
         connection.execute("INSERT INTO note_tags (note_id, tag_id, created_at) VALUES ('bad', 'tag', '2026-07-24T00:00:00Z'), ('good', 'tag', '2026-07-24T00:00:00Z')", [])?;
-        connection.execute("INSERT INTO assets (id, file_name, extension, relative_path, mime_type, size, width, height, hash, created_at) VALUES ('bad-asset', 'bad.png', 'png', 'unexpected/bad.png', 'image/png', 1, 1, 1, 'partial-hash', '2026-07-24T00:00:00Z')", [])?;
+        connection.execute("INSERT INTO assets (id, file_name, extension, relative_path, mime_type, size, width, height, hash, created_at) VALUES ('bad-asset', 'mismatched.png', 'png', 'assets/bad.png', 'image/png', 1, 1, 1, 'partial-hash', '2026-07-24T00:00:00Z')", [])?;
         connection.execute("INSERT INTO note_assets (note_id, asset_id, created_at) VALUES ('bad', 'bad-asset', '2026-07-24T00:00:00Z')", [])?;
         let target_directory = directory.join("target");
         fs::create_dir(&target_directory)?;
@@ -783,5 +812,67 @@ mod tests {
             ),
             "x assets/a.png ![x](./assets/b.png)",
         );
+    }
+    #[test]
+    fn exports_private_documents_with_original_names_collisions_and_only_live_references()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let root = data_directory();
+        BootstrapRepository::initialize(&root.join("database/notex.db"))?;
+        let notes = crate::services::notes::NotesService::new(&root);
+        let assets = crate::services::assets::AssetsService::new(&root);
+        let note = notes.create()?;
+        let first = assets.save_attachment(&note.id, "报告 [终稿].pdf", b"%PDF-1.7\none\n%%EOF")?;
+        let second =
+            assets.save_attachment(&note.id, "报告 [终稿].pdf", b"%PDF-1.7\ntwo\n%%EOF")?;
+        let unused = assets.save_attachment(&note.id, "已移除.pdf", b"%PDF-1.7\nunused\n%%EOF")?;
+        let content = format!(
+            "[甲](./{})\n[乙](./{})\n`[示例](./{})`",
+            first.relative_path, second.relative_path, unused.relative_path
+        );
+        notes.save(&note.id, "项目 # A.md", &content)?;
+        let other = notes.create()?;
+        let other_asset =
+            assets.save_attachment(&other.id, "说明.pdf", b"%PDF-1.7\nother\n%%EOF")?;
+        notes.save(
+            &other.id,
+            "项目 # A.md",
+            &format!("[说明](./{})", other_asset.relative_path),
+        )?;
+        let plain = notes.create()?;
+        notes.save(
+            &plain.id,
+            "项目 # A",
+            "同名 Markdown 文件不能与附件目录冲突",
+        )?;
+        let target = root.join("exports");
+        fs::create_dir(&target)?;
+        let result = ExportService::new(&root).export(
+            &request(ExportScopeKind::Category, "uncategorized", &target),
+            &ExportTaskRegistry::default(),
+            |_| Ok(()),
+        )?;
+        assert_eq!(result.exported_count, 3);
+        assert!(result.issues.is_empty());
+        let output = target.join(result.directory_label);
+        let folders: Vec<_> = fs::read_dir(&output)?.collect::<Result<Vec<_>, _>>()?;
+        assert_eq!(folders.len(), 3);
+        let mut found = false;
+        for folder in folders {
+            if !folder.path().is_dir() {
+                continue;
+            }
+            let markdown = fs::read_to_string(folder.path().join("项目 # A.md.md"))?;
+            if markdown.contains("[甲]") {
+                found = true;
+                assert!(folder.path().join("报告 [终稿].pdf").is_file());
+                assert!(folder.path().join("报告 [终稿]-2.pdf").is_file());
+                assert!(!folder.path().join("已移除.pdf").exists());
+                assert!(markdown.contains("%5B") && markdown.contains("%5D"));
+                assert!(markdown.contains(&format!("`[示例](./{})`", unused.relative_path)));
+                assert_eq!(fs::read_dir(folder.path())?.count(), 3);
+            }
+        }
+        assert!(found);
+        Ok(())
     }
 }

@@ -2,6 +2,7 @@ import { t } from '@/i18n'
 import { onScopeDispose, reactive, ref, shallowRef, watch } from 'vue'
 import type { Ref } from 'vue'
 import { loadNoteImage } from '@/services/assets'
+import { getNoteAssetReferences } from '@/features/editor/assetReferences'
 
 export interface NoteImage {
   relativePath: string
@@ -17,22 +18,9 @@ export interface NoteImageReference {
 }
 
 export function getNoteImageReferences(content: string): NoteImageReference[] {
-  const text = content.replace(/```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)|`[^`\n]*`/g, (code) =>
-    code.replace(/[^\n]/g, ' '),
-  )
-  const references: NoteImageReference[] = []
-  for (const match of text.matchAll(/!\[([^\]\n]*)\]\(\.\/(assets\/[\w-]+\.(?:png|jpe?g|webp|gif))\)/gi)) {
-    const relativePath = match[2]
-    if (relativePath !== undefined) {
-      references.push({
-        from: match.index,
-        relativePath,
-        label: match[1] || t('图片'),
-        to: match.index + match[0].length,
-      })
-    }
-  }
-  return references
+  return getNoteAssetReferences(content)
+    .filter((reference) => reference.kind === 'image')
+    .map(({ from, to, relativePath, label }) => ({ from, to, relativePath, label }))
 }
 
 interface CachedImage {
@@ -55,6 +43,7 @@ export interface NoteImageOptions {
   visiblePaths?: () => readonly string[]
   maxBytes?: number
   concurrency?: number
+  revision?: () => number
 }
 
 export function useNoteImages(
@@ -72,6 +61,7 @@ export function useNoteImages(
   const maxBytes = options.maxBytes ?? 24 * 1024 * 1024
   const concurrency = Math.max(1, options.concurrency ?? 2)
   let currentNoteId = noteId()
+  let currentRevision = options.revision?.() ?? 0
   let disposed = false
   let active = 0
   let clock = 0
@@ -175,9 +165,12 @@ export function useNoteImages(
       noteId,
       () => [...new Set(references().map((reference) => reference.relativePath))].join('\n'),
       () => options.visiblePaths?.().join('\n') ?? '',
+      () => options.revision?.() ?? 0,
     ],
-    ([id, pathList, visibleList]) => {
-      if (currentNoteId !== id) {
+    ([id, pathList, visibleList, revision]) => {
+      if (currentNoteId !== id || revision !== currentRevision) {
+        currentRevision = revision
+        originalVersion += 1
         imageController.abort()
         imageController = new AbortController()
         cache.forEach(release)

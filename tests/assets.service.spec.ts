@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { flushPromises } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { loadNoteImage } from '@/services/assets'
+import { loadNoteImage, saveNoteAttachment } from '@/services/assets'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 const createObjectURL = vi.fn((_blob: Blob | MediaSource) => 'blob:preview')
@@ -10,6 +10,24 @@ describe('本地图片读取 Service', () => {
   beforeEach(() => {
     vi.resetAllMocks()
     vi.stubGlobal('URL', Object.assign(URL, { createObjectURL }))
+  })
+
+  it('附件使用原始二进制 IPC 和编码后的文件名，避免大文件数字数组序列化', async () => {
+    const bytes = new Uint8Array([37, 80, 68, 70, 45])
+    const file = new File([bytes], '报告 [终稿].pdf')
+    Object.defineProperty(file, 'arrayBuffer', { value: async () => bytes.buffer })
+    vi.mocked(invoke).mockResolvedValue({ id: 'file' })
+    await saveNoteAttachment('note', file)
+    expect(invoke).toHaveBeenCalledWith('save_note_attachment', bytes.buffer, {
+      headers: { 'x-note-id': 'note', 'x-file-name': encodeURIComponent(file.name) },
+    })
+  })
+
+  it('超出附件大小限制时在读取和 IPC 前拒绝', async () => {
+    const file = new File([], 'large.pdf')
+    Object.defineProperty(file, 'size', { value: 101 * 1024 * 1024 })
+    await expect(saveNoteAttachment('note', file)).rejects.toMatchObject({ code: 'ASSET_FILE_TOO_LARGE' })
+    expect(invoke).not.toHaveBeenCalled()
   })
 
   it.each(['ArrayBuffer', 'macOS 数字数组'])('将 %s 响应保留为原始图片字节', async (transport) => {

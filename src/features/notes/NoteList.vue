@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { t, localizeMessage } from '@/i18n'
-import { Filter, Search, Sort } from '@element-plus/icons-vue'
+import { Search } from '@element-plus/icons-vue'
 import type { ScrollbarInstance } from 'element-plus'
-import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue'
 import NoteListItem from './NoteListItem.vue'
+import NoteContextMenu from './NoteContextMenu.vue'
 import type { NoteSummary } from '@/types/notes'
 
 const props = defineProps<{
@@ -25,9 +26,14 @@ const emit = defineEmits<{
   select: [id: string]
   search: [query: string]
   loadMore: []
+  split: [id: string, direction: 'right' | 'down']
+  togglePin: [id: string]
+  trash: [id: string]
 }>()
 
 const query = shallowRef('')
+const contextMenu = shallowRef<{ id: string; x: number; y: number; trigger?: HTMLElement }>()
+const contextNote = computed(() => props.notes.find((note) => note.id === contextMenu.value?.id))
 const listItems = useTemplateRef<ScrollbarInstance>('listItems')
 const scrollTop = shallowRef(0)
 const viewportHeight = shallowRef(600)
@@ -55,7 +61,46 @@ const noteListTitle = computed(() => (props.categoryName === undefined ? t('全�
 const virtualHeight = computed(() => visibleNotes.value.length * itemHeight)
 const virtualOffset = computed(() => visibleRange.value.start * itemHeight)
 
+function openContextMenu(id: string, event: MouseEvent | KeyboardEvent): void {
+  const trigger = event.currentTarget instanceof HTMLElement ? event.currentTarget : undefined
+  const bounds = trigger?.getBoundingClientRect()
+  const usePointer = event instanceof MouseEvent && (event.clientX !== 0 || event.clientY !== 0)
+  contextMenu.value = {
+    id,
+    x: usePointer ? event.clientX : (bounds?.left ?? 0),
+    y: usePointer ? event.clientY : (bounds?.bottom ?? 0),
+    trigger,
+  }
+}
+
+function closeContextMenu(restoreFocus = false): void {
+  const trigger = contextMenu.value?.trigger
+  contextMenu.value = undefined
+  if (restoreFocus) void nextTick(() => trigger?.focus())
+}
+
+function splitNote(direction: 'right' | 'down'): void {
+  const noteId = contextMenu.value?.id
+  closeContextMenu()
+  if (noteId !== undefined) emit('split', noteId, direction)
+}
+
+function togglePin(): void {
+  const noteId = contextMenu.value?.id
+  closeContextMenu(true)
+  if (noteId !== undefined) emit('togglePin', noteId)
+}
+
+function trashNote(): void {
+  const noteId = contextMenu.value?.id
+  closeContextMenu(true)
+  if (noteId !== undefined) emit('trash', noteId)
+}
+
+watch([() => props.loading, () => props.notes, query], () => closeContextMenu())
+
 function updateVisibleRange(): void {
+  closeContextMenu()
   const container = listItems.value?.wrapRef
   if (container === undefined) {
     return
@@ -126,6 +171,7 @@ onBeforeUnmount(() => {
             :selected="note.id === selectedId"
             :search-query="searchQuery ?? query"
             @select="emit('select', $event)"
+            @context-menu="openContextMenu"
           />
         </div>
       </div>
@@ -133,6 +179,17 @@ onBeforeUnmount(() => {
         {{ t('加载更多') }}
       </el-button>
     </el-scrollbar>
+    <NoteContextMenu
+      v-if="contextMenu !== undefined && contextNote !== undefined"
+      :key="`${contextMenu.id}:${contextMenu.x}:${contextMenu.y}`"
+      :x="contextMenu.x"
+      :y="contextMenu.y"
+      :is-pinned="contextNote.isPinned"
+      @split="splitNote"
+      @toggle-pin="togglePin"
+      @trash="trashNote"
+      @close="closeContextMenu"
+    />
   </section>
 </template>
 

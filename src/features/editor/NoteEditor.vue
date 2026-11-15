@@ -1,16 +1,6 @@
 <script setup lang="ts">
 import { t, locale } from '@/i18n'
-import {
-  Calendar,
-  Clock,
-  CopyDocument,
-  Delete,
-  Download,
-  Folder,
-  MoreFilled,
-  Star,
-  StarFilled,
-} from '@element-plus/icons-vue'
+import { Calendar, Clock, CopyDocument, Download, Folder, MoreFilled, Paperclip } from '@element-plus/icons-vue'
 import { computed, useTemplateRef, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import EditorStatusBar from './EditorStatusBar.vue'
@@ -22,6 +12,7 @@ import type { CategoryNode } from '@/types/categories'
 import type { SaveStatus as SaveStatusType } from '@/stores/notes'
 import type { NoteDetail } from '@/types/notes'
 import type { TagSummary } from '@/types/tags'
+import type { AttachmentHandlers, SavedAsset } from '@/types/assets'
 
 const props = defineProps<{
   note?: NoteDetail
@@ -33,6 +24,9 @@ const props = defineProps<{
   tags: TagSummary[]
   selectedTagIds: string[]
   searchQuery?: string
+  attachments?: AttachmentHandlers
+  assets?: readonly SavedAsset[]
+  assetRevision?: number
 }>()
 
 const emit = defineEmits<{
@@ -43,12 +37,10 @@ const emit = defineEmits<{
   updateTags: [tagIds: string[]]
   createTag: [name: string]
   export: []
-  trash: []
-  togglePin: []
 }>()
 
 const titleInput = useTemplateRef<{ focus: () => void }>('titleInput')
-const markdownEditor = useTemplateRef<{ focus: () => void }>('markdownEditor')
+const markdownEditor = useTemplateRef<{ focus: () => void; insertAttachments: () => Promise<void> }>('markdownEditor')
 const noteId = computed(() => props.note?.id)
 const noteCategoryPath = computed(() => findCategoryPath(props.categories, props.note?.categoryId) ?? t('未分类'))
 const noteTags = computed(() => props.tags.filter((tag) => props.selectedTagIds.includes(tag.id)))
@@ -154,6 +146,15 @@ defineExpose({ focusEditor })
           </p>
           <div class="note-editor-actions">
             <el-button
+              v-if="attachments !== undefined"
+              text
+              circle
+              :icon="Paperclip"
+              :title="t('添加附件')"
+              :aria-label="t('添加附件')"
+              @click="markdownEditor?.insertAttachments()"
+            />
+            <el-button
               text
               circle
               :icon="CopyDocument"
@@ -164,28 +165,10 @@ defineExpose({ focusEditor })
             <el-button
               text
               circle
-              :icon="note.isPinned ? StarFilled : Star"
-              :title="note.isPinned ? t('取消置顶') : t('置顶笔记')"
-              :aria-label="note.isPinned ? t('取消置顶') : t('置顶笔记')"
-              :aria-pressed="note.isPinned"
-              @click="emit('togglePin')"
-            />
-            <el-button
-              text
-              circle
               :icon="Download"
               :title="t('导出笔记')"
               :aria-label="t('导出笔记')"
               @click="emit('export')"
-            />
-            <el-button
-              text
-              type="danger"
-              circle
-              :icon="Delete"
-              :title="t('移入回收站')"
-              :aria-label="t('移入回收站')"
-              @click="emit('trash')"
             />
             <el-popover placement="bottom-end" :width="360" trigger="click">
               <template #reference>
@@ -213,6 +196,9 @@ defineExpose({ focusEditor })
           class="note-editor-markdown"
           :model-value="note.content"
           :save-image="saveImage"
+          :attachments="attachments"
+          :assets="assets"
+          :asset-revision="assetRevision"
           :search-query="searchQuery"
           @update:model-value="updateContent"
           @paste-error="emit('pasteError', $event)"
@@ -223,7 +209,7 @@ defineExpose({ focusEditor })
   </section>
   <section v-else class="editor-empty-state">
     <h1 class="editor-empty-title">{{ t('打开即记') }}</h1>
-    <p class="editor-empty-copy">{{ t('从左侧新建一条笔记，纯文本和图片都会保存在本机。') }}</p>
+    <p class="editor-empty-copy">{{ t('从左侧新建一条笔记，文本、图片和附件都会保存在本机。') }}</p>
   </section>
 </template>
 

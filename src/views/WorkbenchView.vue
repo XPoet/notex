@@ -1,20 +1,22 @@
 <script setup lang="ts">
 import { t, localizeMessage } from '@/i18n'
-import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, shallowRef, watch } from 'vue'
+import type { ComponentPublicInstance } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { storeToRefs } from 'pinia'
-import { getNoteAssetHealth, savePastedImage, toAssetError } from '@/services/assets'
 import { useAutoSave } from '@/composables/useAutoSave'
 import { useSearchQuery } from '@/composables/useSearchQuery'
-import NoteEditor from '@/features/editor/NoteEditor.vue'
+import NoteEditorPane from '@/features/editor/NoteEditorPane.vue'
+import NoteWorkspace from '@/features/workspace/NoteWorkspace.vue'
+import { collectPanes, removePane, replacePaneNote, splitPane } from '@/features/workspace/splitLayout'
+import type { NoteLayoutNode, SplitDirection } from '@/features/workspace/splitLayout'
 import ExportDialog from '@/features/export/ExportDialog.vue'
 import NoteList from '@/features/notes/NoteList.vue'
 import WorkspaceLayout from '@/layouts/WorkspaceLayout.vue'
 import { useNotesStore } from '@/stores/notes'
 import { useCategoriesStore } from '@/stores/categories'
 import { useTagsStore } from '@/stores/tags'
-import { createTag, listNoteTags, setNoteTags } from '@/services/tags'
 import { toCategoryError } from '@/services/categories'
 import { trashNote } from '@/services/trash'
 import { UNCATEGORIZED_CATEGORY_ID, type CategoryNode } from '@/types/categories'
@@ -26,21 +28,25 @@ const categoriesStore = useCategoriesStore()
 const tagsStore = useTagsStore()
 const route = useRoute()
 const router = useRouter()
-const { error, isLoading, notes, saveStatus, selectedNote } = storeToRefs(notesStore)
-const missingAssetCount = shallowRef(0)
-const selectedTagIds = shallowRef<string[]>([])
+const { isLoading, notes, selectedNote } = storeToRefs(notesStore)
+const layout = shallowRef<NoteLayoutNode>({ kind: 'pane', id: 'pane-1' })
+const activePaneId = shallowRef('pane-1')
+const panes = computed(() => collectPanes(layout.value))
+const paneEditors = new Map<string, { focusEditor: () => void }>()
+let nextPaneId = 1
+let splitVersion = 0
+let disposed = false
 const listSearchQuery = shallowRef<string>()
 const searchQuery = computed(
   () => listSearchQuery.value ?? (typeof route.query.search === 'string' ? route.query.search : ''),
 )
-const imageError = shallowRef<string>()
 const isExportDialogVisible = shallowRef(false)
 const isMovingNote = shallowRef(false)
 const isTrashingNote = shallowRef(false)
-const noteEditor = useTemplateRef<{ focusEditor: () => void }>('noteEditor')
+const exportNote = shallowRef<NoteDetail>()
 let routeVersion = 0
 const exportScopeOptions = computed<ExportScopeOption[]>(() => {
-  const note = selectedNote.value
+  const note = exportNote.value
   if (note === undefined) {
     return []
   }
@@ -48,7 +54,7 @@ const exportScopeOptions = computed<ExportScopeOption[]>(() => {
     {
       scope: { kind: 'note', id: note.id },
       title: t('当前笔记'),
-      description: t('导出当前笔记及其关联的原格式图片。'),
+      description: t('导出当前笔记及其引用的图片和附件。'),
     },
     {
       scope: { kind: 'category', id: note.categoryId ?? UNCATEGORIZED_CATEGORY_ID },
@@ -107,31 +113,102 @@ function handleListSearch(query: string): void {
   else listSearch.schedule(query)
 }
 
-async function refreshAssetHealth(noteId: string | undefined): Promise<void> {
-  if (noteId === undefined) {
-    missingAssetCount.value = 0
-    return
-  }
-  try {
-    const health = await getNoteAssetHealth(noteId)
-    if (selectedNote.value?.id === noteId) missingAssetCount.value = health.missingAssetCount
-  } catch {
-    if (selectedNote.value?.id === noteId) missingAssetCount.value = 0
+// 只替换活动分栏，其他已打开的笔记继续保留。
+watch(
+  () => selectedNote.value?.id,
+  (id) => {
+    if (panes.value.find((pane) => pane.id === activePaneId.value)?.noteId === id) return
+    layout.value = replacePaneNote(layout.value, activePaneId.value, id)
+  },
+  { immediate: true, flush: 'sync' },
+)
+watch(
+  () => [...new Set(panes.value.flatMap((pane) => (pane.noteId === undefined ? [] : [pane.noteId])))].sort(),
+  (ids, previous) => {
+    if (previous !== undefined && ids.length === previous.length && ids.every((id, index) => id === previous[index]))
+      return
+    void notesStore.retainNotes(ids).catch(() => undefined)
+  },
+  { immediate: true, flush: 'sync' },
+)
+
+function activatePane(paneId: string): void {
+  if (isTrashingNote.value || activePaneId.value === paneId) return
+  const pane = panes.value.find((item) => item.id === paneId)
+  if (pane === undefined) return
+  activePaneId.value = paneId
+  notesStore.activateNote(pane.noteId)
+}
+
+function inPane(paneId: string, action: () => Promise<void>): void {
+  activatePane(paneId)
+  void action()
+}
+
+function setPaneEditor(paneId: string, editor: Element | ComponentPublicInstance | null): void {
+  if (editor !== null && 'focusEditor' in editor && typeof editor.focusEditor === 'function') {
+    const focus = editor.focusEditor
+    paneEditors.set(paneId, { focusEditor: () => focus() })
+  } else {
+    paneEditors.delete(paneId)
   }
 }
 
-watch(
-  () => selectedNote.value?.id,
-  (noteId) => {
-    void refreshAssetHealth(noteId)
-  },
-  { immediate: true },
-)
+async function handleSplit(id: string, direction: SplitDirection): Promise<void> {
+  if (isTrashingNote.value) return
+  const targetPaneId = activePaneId.value
+  const version = ++splitVersion
+  try {
+    await autoSave.flush()
+    await notesStore.openNote(id)
+    if (version !== splitVersion || isTrashingNote.value || !panes.value.some((pane) => pane.id === targetPaneId))
+      return
+    const paneId = `pane-${++nextPaneId}`
+    layout.value = splitPane(
+      layout.value,
+      targetPaneId,
+      { kind: 'pane', id: paneId, noteId: id },
+      direction,
+      `split-${nextPaneId}`,
+    )
+    activatePane(paneId)
+    await nextTick()
+    paneEditors.get(paneId)?.focusEditor()
+  } catch {
+    ElMessage.error(t('无法打开笔记。'))
+  } finally {
+    if (!disposed) {
+      await notesStore
+        .retainNotes(panes.value.flatMap((pane) => (pane.noteId === undefined ? [] : [pane.noteId])))
+        .catch(() => undefined)
+    }
+  }
+}
+
+async function handleClosePane(paneId: string): Promise<void> {
+  if (isTrashingNote.value || panes.value.length === 1) return
+  try {
+    await autoSave.flush()
+    const index = panes.value.findIndex((pane) => pane.id === paneId)
+    if (index < 0 || panes.value.length === 1) return
+    const remaining = panes.value.filter((pane) => pane.id !== paneId)
+    const next = remaining[Math.min(index, remaining.length - 1)]
+    if (activePaneId.value === paneId && next !== undefined) activatePane(next.id)
+    layout.value = removePane(layout.value, paneId)
+    paneEditors.delete(paneId)
+    await notesStore.retainNotes(panes.value.flatMap((pane) => (pane.noteId === undefined ? [] : [pane.noteId])))
+    await nextTick()
+    paneEditors.get(activePaneId.value)?.focusEditor()
+  } catch {
+    // 保存状态保留在原分栏，允许重试；保存成功后才能关闭。
+  }
+}
 
 watch(
   () => [route.query.category, route.query.tags, route.query.note, route.query.create] as const,
   async ([category, tags, note, create], previous) => {
     const version = ++routeVersion
+    splitVersion += 1
     if (create === '1') {
       try {
         await autoSave.flush()
@@ -155,54 +232,21 @@ watch(
   { immediate: true },
 )
 
-watch(
-  () => selectedNote.value?.id,
-  async (noteId) => {
-    selectedTagIds.value = []
-    if (noteId === undefined) {
-      return
-    }
-    try {
-      const tags = await listNoteTags(noteId)
-      if (selectedNote.value?.id === noteId) {
-        selectedTagIds.value = tags.map((tag) => tag.id)
-      }
-    } catch {
-      if (selectedNote.value?.id === noteId) {
-        selectedTagIds.value = []
-      }
-    }
-  },
-  { immediate: true },
-)
-
-function updateNote(change: Pick<NoteDetail, 'title' | 'content'>): void {
+function updateNote(paneId: string, change: Pick<NoteDetail, 'title' | 'content'>): void {
   if (isTrashingNote.value) return
-  notesStore.updateDraft(change)
+  const pane = panes.value.find((item) => item.id === paneId)
+  if (pane?.noteId === undefined) return
+  activatePane(paneId)
+  notesStore.updateDraft(change, pane.noteId)
   autoSave.schedule()
-}
-
-async function saveImage(bytes: Uint8Array): Promise<string> {
-  const note = selectedNote.value
-  if (note === undefined) {
-    throw new Error(t('请先新建或选择一条笔记。'))
-  }
-  try {
-    const asset = await savePastedImage(note.id, bytes)
-    imageError.value = undefined
-    await refreshAssetHealth(note.id)
-    return t('![图片](./{value1})', { value1: asset.relativePath })
-  } catch (failure: unknown) {
-    const assetError = toAssetError(failure)
-    imageError.value = assetError.message
-    throw new Error(assetError.message)
-  }
 }
 
 async function handleCreate(categoryId?: string): Promise<boolean> {
   if (isTrashingNote.value) return false
+  const targetPaneId = activePaneId.value
   try {
     await autoSave.flush()
+    if (isTrashingNote.value || activePaneId.value !== targetPaneId) return false
     if (categoryId !== undefined) {
       await router.push({ name: 'workbench', query: { category: categoryId, create: '1' } })
       return true
@@ -234,10 +278,10 @@ async function loadNotesForRoute(category: unknown, tags: unknown, selectedId?: 
   await notesStore.load(selectedId)
 }
 
-async function handleTrash(): Promise<void> {
+async function handleTrash(noteId = selectedNote.value?.id): Promise<void> {
   if (isTrashingNote.value) return
-  const note = selectedNote.value
-  if (note === undefined) {
+  splitVersion += 1
+  if (noteId === undefined) {
     return
   }
   const shouldTrash = await ElMessageBox.confirm(t('笔记将移入回收站，之后可恢复。是否继续？'), t('确认删除笔记'), {
@@ -247,15 +291,19 @@ async function handleTrash(): Promise<void> {
   })
     .then(() => true)
     .catch(() => false)
-  if (!shouldTrash) {
+  if (!shouldTrash || isTrashingNote.value) {
     return
   }
   isTrashingNote.value = true
   try {
     await autoSave.flush()
-    await trashNote(note.id)
+    await trashNote(noteId)
     ElMessage.success(t('笔记已移入回收站。'))
-    await notesStore.reloadAfterTrash(note.id)
+    await notesStore.reloadAfterTrash(noteId)
+    const replacementId = selectedNote.value?.id
+    for (const pane of panes.value) {
+      if (pane.noteId === noteId) layout.value = replacePaneNote(layout.value, pane.id, replacementId)
+    }
     await categoriesStore.load()
   } catch {
     ElMessage.error(localizeMessage(notesStore.error?.message ?? t('无法读取笔记')))
@@ -265,9 +313,13 @@ async function handleTrash(): Promise<void> {
 }
 
 async function handleExport(): Promise<void> {
+  const noteId = selectedNote.value?.id
+  if (noteId === undefined) return
   try {
     await autoSave.flush()
-    if (selectedNote.value !== undefined) {
+    const note = notesStore.getSession(noteId)?.note
+    if (note !== undefined) {
+      exportNote.value = note
       isExportDialogVisible.value = true
     }
   } catch {
@@ -282,7 +334,11 @@ async function handleUpdateCategory(categoryId: string | undefined): Promise<voi
 }
 
 async function handleMoveNote(noteId: string, categoryId: string | undefined): Promise<void> {
-  if (isMovingNote.value || !notes.value.some((note) => note.id === noteId)) return
+  if (
+    isMovingNote.value ||
+    (!notes.value.some((note) => note.id === noteId) && notesStore.getSession(noteId) === undefined)
+  )
+    return
   isMovingNote.value = true
   try {
     await autoSave.flush()
@@ -300,31 +356,12 @@ async function handleMoveNote(noteId: string, categoryId: string | undefined): P
   }
 }
 
-async function handleUpdateTags(tagIds: string[]): Promise<void> {
-  const note = selectedNote.value
-  if (note === undefined) return
-  await autoSave.flush()
-  await setNoteTags(note.id, tagIds)
-  if (selectedNote.value?.id === note.id) selectedTagIds.value = tagIds
-  await tagsStore.load()
-  await notesStore.refreshList()
-}
-
-async function handleCreateTag(name: string): Promise<void> {
-  const noteId = selectedNote.value?.id
-  const tag = await createTag(name)
-  await tagsStore.load()
-  if (selectedNote.value?.id !== noteId) return
-  if (!selectedTagIds.value.includes(tag.id)) {
-    await handleUpdateTags([...selectedTagIds.value, tag.id])
-  }
-}
-
 async function handleSelect(id: string): Promise<void> {
   if (isTrashingNote.value) return
+  const targetPaneId = activePaneId.value
   try {
     await autoSave.flush()
-    if (isTrashingNote.value) return
+    if (isTrashingNote.value || activePaneId.value !== targetPaneId) return
     await notesStore.selectNote(id)
   } catch {
     return
@@ -346,7 +383,7 @@ function handleKeyboardShortcut(event: KeyboardEvent): void {
   }
   if (event.key.toLowerCase() === 'e') {
     event.preventDefault()
-    noteEditor.value?.focusEditor()
+    paneEditors.get(activePaneId.value)?.focusEditor()
   }
   if (event.key.toLowerCase() === 's') {
     event.preventDefault()
@@ -358,14 +395,16 @@ function handleKeyboardShortcut(event: KeyboardEvent): void {
   }
 }
 
-async function handleTogglePin(): Promise<void> {
-  const note = selectedNote.value
+async function handleTogglePin(noteId: string): Promise<void> {
+  if (isTrashingNote.value) return
+  const note = notes.value.find((item) => item.id === noteId)
   if (note === undefined) return
+  const pinned = !note.isPinned
   try {
-    await notesStore.setPinned(!note.isPinned)
-    ElMessage.success(note.isPinned ? t('已取消置顶。') : t('笔记已置顶。'))
+    await notesStore.setPinned(pinned, noteId)
+    ElMessage.success(pinned ? t('笔记已收藏。') : t('已取消收藏。'))
   } catch {
-    ElMessage.error(t('无法更新置顶状态。'))
+    ElMessage.error(t('无法更新收藏状态。'))
   }
 }
 
@@ -375,6 +414,8 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  disposed = true
+  splitVersion += 1
   removeNavigationGuard()
   window.removeEventListener('keydown', handleKeyboardShortcut)
 })
@@ -405,47 +446,38 @@ onBeforeUnmount(() => {
         @create="handleCreate"
         @retry="handleLoad"
         @select="handleSelect"
+        @split="handleSplit"
+        @toggle-pin="handleTogglePin"
+        @trash="handleTrash"
         @search="handleListSearch"
         @load-more="notesStore.loadNext"
       />
     </template>
 
     <template #editor>
-      <NoteEditor
-        :inert="isTrashingNote"
-        ref="noteEditor"
-        :note="selectedNote"
-        :save-status="saveStatus"
-        :save-error="error?.message"
-        :missing-asset-count="missingAssetCount"
-        :save-image="saveImage"
-        :categories="categoriesStore.categories"
-        :tags="tagsStore.tags"
-        :selected-tag-ids="selectedTagIds"
-        :search-query="searchQuery"
-        @update="updateNote"
-        @update-category="handleUpdateCategory"
-        @update-tags="handleUpdateTags"
-        @create-tag="handleCreateTag"
-        @export="handleExport"
-        @trash="handleTrash"
-        @toggle-pin="handleTogglePin"
-        @retry="autoSave.flush().catch(() => undefined)"
-        @paste-error="imageError = $event"
-      />
-      <p v-if="imageError" class="image-error" role="alert">{{ localizeMessage(imageError) }}</p>
+      <NoteWorkspace :node="layout" :active-pane-id="activePaneId" @activate="activatePane">
+        <template #default="{ pane, active }">
+          <NoteEditorPane
+            :ref="(editor) => setPaneEditor(pane.id, editor)"
+            :note="pane.noteId === undefined ? undefined : notesStore.getSession(pane.noteId)?.note"
+            :active="active"
+            :multiple="panes.length > 1"
+            :busy="isTrashingNote"
+            :save-status="
+              pane.noteId === undefined ? 'idle' : (notesStore.getSession(pane.noteId)?.saveStatus ?? 'idle')
+            "
+            :save-error="pane.noteId === undefined ? undefined : notesStore.getSession(pane.noteId)?.error?.message"
+            :categories="categoriesStore.categories"
+            :search-query="searchQuery"
+            @update="updateNote(pane.id, $event)"
+            @update-category="inPane(pane.id, () => handleUpdateCategory($event))"
+            @export="inPane(pane.id, handleExport)"
+            @retry="autoSave.flush().catch(() => undefined)"
+            @close="handleClosePane(pane.id)"
+          />
+        </template>
+      </NoteWorkspace>
     </template>
   </WorkspaceLayout>
   <ExportDialog v-model="isExportDialogVisible" :scope-options="exportScopeOptions" />
 </template>
-
-<style scoped lang="scss">
-.image-error {
-  margin: 0;
-  padding: var(--space-8) var(--space-16);
-  border-block-start: 1px solid var(--color-border);
-  background: color-mix(in srgb, var(--color-danger) 8%, var(--color-surface));
-  color: var(--color-danger);
-  font-size: var(--font-size-sm);
-}
-</style>

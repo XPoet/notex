@@ -1,5 +1,25 @@
 // 简体中文原文作为键；每项依次为英语、繁体中文。
 export const messages = {
+  '本地资源目录不可用，未插入资源引用。': [
+    'Local attachment storage is unavailable. No reference was inserted.',
+    '本機資源目錄無法使用，未插入資源引用。',
+  ],
+  '资源文件写入失败，未插入资源引用。': [
+    'Unable to write the attachment. No reference was inserted.',
+    '資源檔案寫入失敗，未插入資源引用。',
+  ],
+  '资源保存失败，未插入资源引用。': [
+    'Unable to save the attachment. No reference was inserted.',
+    '資源儲存失敗，未插入資源引用。',
+  ],
+  '资源无法读取，文件缺失或内容无效。': [
+    'Unable to read the attachment. The file is missing or invalid.',
+    '資源無法讀取，檔案缺失或內容無效。',
+  ],
+  '含附件的笔记按笔记名创建目录，Markdown、图片和文件一起导出，使用相对路径引用。': [
+    'Notes with attachments are exported into folders named after each note, with relative links to their images and files.',
+    '含附件的筆記按筆記名稱建立目錄，Markdown、圖片及檔案一起匯出，使用相對路徑引用。',
+  ],
   启动诊断: ['Startup diagnostics', '啟動診斷'],
   无法初始化本地数据: ['Unable to initialize local data', '無法初始化本機資料'],
   重试: ['Retry', '重試'],
@@ -26,6 +46,10 @@ export const messages = {
   复制笔记内容: ['Copy note content', '複製筆記內容'],
   取消置顶: ['Unpin note', '取消置頂'],
   置顶笔记: ['Pin note', '置頂筆記'],
+  笔记操作: ['Note actions', '筆記操作'],
+  收藏笔记: ['Favorite note', '收藏筆記'],
+  取消收藏: ['Remove from favorites', '取消收藏'],
+  删除笔记: ['Delete note', '刪除筆記'],
   导出笔记: ['Export note', '匯出筆記'],
   移入回收站: ['Move to Trash', '移入垃圾桶'],
   分类与标签: ['Categories and tags', '分類與標籤'],
@@ -101,6 +125,12 @@ export const messages = {
     '確認匯出範圍與目錄後開始。匯出不會修改原始筆記。',
   ],
   全部笔记: ['All notes', '全部筆記'],
+  向右拆分: ['Split Right', '向右拆分'],
+  向下拆分: ['Split Down', '向下拆分'],
+  关闭分栏: ['Close split', '關閉分欄'],
+  笔记分栏: ['Note splits', '筆記分欄'],
+  当前分栏: ['Active split', '目前分欄'],
+  '无法打开笔记。': ['Unable to open the note.', '無法開啟筆記。'],
   '{value1}笔记': ['{value1} notes', '{value1}筆記'],
   搜索笔记: ['Search notes', '搜尋筆記'],
   '正在加载笔记…': ['Loading notes…', '正在載入筆記…'],
@@ -484,6 +514,9 @@ export const messages = {
   '已取消置顶。': ['Note unpinned.', '已取消置頂。'],
   '笔记已置顶。': ['Note pinned.', '筆記已置頂。'],
   '无法更新置顶状态。': ['Unable to update the pin status.', '無法更新置頂狀態。'],
+  '已取消收藏。': ['Note removed from favorites.', '已取消收藏。'],
+  '笔记已收藏。': ['Note added to favorites.', '筆記已收藏。'],
+  '无法更新收藏状态。': ['Unable to update the favorite status.', '無法更新收藏狀態。'],
   '文件名或正文不符合笔记要求。': [
     'The filename or content does not meet the note requirements.',
     '檔案名或內文不符合筆記要求。',
@@ -679,5 +712,46 @@ export const messages = {
   '一次最多选择 {value1} 个文件，请分批导入。': [
     'Select up to {value1} files at a time. Please import in batches.',
     '一次最多選擇 {value1} 個檔案，請分批匯入。',
+  ],
+  '打开{value1}': ['Open {value1}', '開啟{value1}'],
+  附件操作: ['Attachment actions', '附件操作'],
+  用默认应用打开: ['Open with default app', '使用預設應用程式開啟'],
+  在文件管理器中显示: ['Show in file manager', '在檔案管理器中顯示'],
+  另存为: ['Save as', '另存新檔'],
+  从笔记中移除: ['Remove from note', '從筆記中移除'],
+  添加附件: ['Add attachment', '新增附件'],
+  '附件大小超过 100 MiB。': ['Attachments must be 100 MiB or smaller.', '附件大小超過 100 MiB。'],
+  '附件添加失败，请重试。': ['Unable to add attachment. Please try again.', '附件新增失敗，請重試。'],
+  '附件操作失败，请重试。': ['Unable to complete attachment action. Please try again.', '附件操作失敗，請重試。'],
+  '附件大小为 {value1}。是否继续添加？': [
+    'The attachment is {value1}. Continue adding it?',
+    '附件大小為 {value1}。是否繼續新增？',
+  ],
+  '以下附件未能添加：{value1}': ['Unable to add these attachments: {value1}', '以下附件無法新增：{value1}'],
+  '不支持的附件格式或文件内容无效。': [
+    'Unsupported attachment format or invalid file contents.',
+    '不支援的附件格式或檔案內容無效。',
+  ],
+  '无法使用默认应用打开附件，请检查文件和默认应用设置。': [
+    'Unable to open the attachment. Check the file and your default app settings.',
+    '無法使用預設應用程式開啟附件，請檢查檔案及預設應用程式設定。',
+  ],
+  '附件另存为失败。': ['Unable to save the attachment copy.', '附件另存新檔失敗。'],
+  '无法读取剪贴板文件。': ['Unable to read clipboard files.', '無法讀取剪貼簿檔案。'],
+  '文本、图片和附件都会保存在本机。': [
+    'Text, images and attachments are saved locally.',
+    '文字、圖片和附件都會儲存在本機。',
+  ],
+  '从左侧新建一条笔记，文本、图片和附件都会保存在本机。': [
+    'Create a note from the left. Text, images and attachments are saved locally.',
+    '從左側新增一則筆記，文字、圖片和附件都會儲存在本機。',
+  ],
+  '导出当前笔记及其引用的图片和附件。': [
+    'Export the current note with its referenced images and attachments.',
+    '匯出目前筆記及其引用的圖片和附件。',
+  ],
+  '有 {value1} 个本地资源缺失。原 Markdown 引用已保留，可在恢复文件后继续使用。': [
+    '{value1} local resources are missing. Their Markdown references are preserved and will work once the files are restored.',
+    '有 {value1} 個本機資源缺失。原 Markdown 引用已保留，可在恢復檔案後繼續使用。',
   ],
 } as const

@@ -21,6 +21,9 @@ impl BootstrapService {
         self.create_required_directories()?;
         let database_path = self.data_directory.join("database").join("notex.db");
         let schema_version = BootstrapRepository::initialize(&database_path)?;
+        AssetsService::new(&self.data_directory)
+            .migrate_legacy()
+            .map_err(|_| BootstrapError::MigrationFailed)?;
         BootstrapRepository::restore_recovery_drafts(&database_path, &current_time()?)?;
         SearchService::new(&self.data_directory)
             .ensure_index()
@@ -90,8 +93,8 @@ mod tests {
         let second_snapshot = service.bootstrap()?;
 
         assert_eq!(first_snapshot.status, "ready");
-        assert_eq!(first_snapshot.schema_version, 4);
-        assert_eq!(second_snapshot.schema_version, 4);
+        assert_eq!(first_snapshot.schema_version, 5);
+        assert_eq!(second_snapshot.schema_version, 5);
         for directory_name in ["database", "assets", "temp", "logs", "config"] {
             assert!(data_directory.join(directory_name).is_dir());
         }
@@ -106,7 +109,7 @@ mod tests {
       [],
       |row| row.get(0),
     )?;
-        assert_eq!(migration_count, 4);
+        assert_eq!(migration_count, 5);
         assert_eq!(table_count, 8);
 
         Ok(())

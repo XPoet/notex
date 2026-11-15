@@ -7,72 +7,94 @@ export interface ClipboardPasteHandlers {
   insertText: (text: string) => void
   saveImage: (bytes: Uint8Array) => Promise<string>
   onError: (message: string) => void
+  saveFile?: (file: File) => Promise<string>
+  pasteFiles?: () => Promise<string[] | undefined>
+  createInserter?: () => (text: string, block?: boolean) => void
 }
 
 export function useClipboardPaste(handlers: ClipboardPasteHandlers): {
   handlePaste: (event: ClipboardEvent) => Promise<void>
+  handleFiles: (files: readonly File[]) => Promise<void>
 } {
+  async function saveFiles(files: readonly File[]): Promise<string> {
+    const results: string[] = []
+    for (const file of files) {
+      try {
+        if (handlers.saveFile !== undefined) {
+          if (file.size > 100 * 1024 * 1024) throw new Error(t('附件大小超过 100 MiB。'))
+          if (
+            file.size >= LARGE_IMAGE_BYTES &&
+            !window.confirm(t('附件大小为 {value1}。是否继续添加？', { value1: formatFileSize(file.size) }))
+          )
+            continue
+          results.push(await handlers.saveFile(file))
+        } else if (file.type.startsWith('image/')) {
+          const bytes = new Uint8Array(await file.arrayBuffer())
+          if (await confirmLargeImage(bytes.byteLength)) results.push(await handlers.saveImage(bytes))
+        }
+      } catch (error: unknown) {
+        handlers.onError(
+          error instanceof Error
+            ? error.message
+            : typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string'
+              ? error.message
+              : t('附件添加失败，请重试。'),
+        )
+      }
+    }
+    return results.filter(Boolean).join('\n')
+  }
+
+  async function handleFiles(files: readonly File[]): Promise<void> {
+    const insert = handlers.createInserter?.() ?? handlers.insertText
+    insert(await saveFiles(files), true)
+  }
+
   async function handlePaste(event: ClipboardEvent): Promise<void> {
-    const imageFile = findClipboardImage(event.clipboardData)
-    if (imageFile !== undefined) {
-      event.preventDefault()
-      await saveImageFile(imageFile)
-      return
-    }
-
-    if (hasClipboardImage(event.clipboardData)) {
-      event.preventDefault()
-      await saveBitmap()
-      return
-    }
-
-    if (event.clipboardData !== null) {
-      event.preventDefault()
-      handlers.insertText(event.clipboardData.getData('text/plain'))
-    }
-  }
-
-  async function saveImageFile(file: File): Promise<void> {
+    event.preventDefault()
+    const insert = handlers.createInserter?.() ?? handlers.insertText
+    let markdown = ''
+    let block = false
     try {
-      const bytes = new Uint8Array(await file.arrayBuffer())
-      if (!(await confirmLargeImage(bytes.byteLength))) {
-        return
-      }
-      const markdown = await handlers.saveImage(bytes)
-      if (markdown.length > 0) {
-        handlers.insertText(markdown)
-      }
+      // Finder may also expose a generated bitmap. Prefer its native file URLs
+      // so original bytes and filenames are preserved and large files stay native.
+      const pasted = await handlers.pasteFiles?.()
+      const files = transferFiles(event.clipboardData)
+      if (pasted !== undefined) {
+        markdown = pasted.join('\n')
+        block = true
+      } else if (files.length > 0) {
+        markdown = await saveFiles(files)
+        block = true
+      } else if (hasClipboardImage(event.clipboardData)) {
+        markdown = await saveClipboardBitmap(handlers.saveImage)
+        block = true
+      } else markdown = event.clipboardData?.getData('text/plain') ?? ''
     } catch (error: unknown) {
-      handlers.onError(error instanceof Error ? error.message : t('图片保存失败，未插入图片引用。'))
+      handlers.onError(
+        error instanceof Error
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string'
+            ? error.message
+            : t('附件添加失败，请重试。'),
+      )
     }
+    insert(markdown, block)
   }
+  return { handlePaste, handleFiles }
+}
 
-  async function saveBitmap(): Promise<void> {
-    try {
-      const markdown = await saveClipboardBitmap(handlers.saveImage)
-      handlers.insertText(markdown)
-    } catch (error: unknown) {
-      handlers.onError(error instanceof Error ? error.message : t('图片保存失败，未插入图片引用。'))
-    }
-  }
-
-  return { handlePaste }
+export function transferFiles(data: DataTransfer | null): File[] {
+  const files = Array.from(data?.files ?? [])
+  if (files.length > 0) return files
+  return Array.from(data?.items ?? []).flatMap((item) => {
+    const file = item.kind === 'file' ? item.getAsFile() : null
+    return file === null ? [] : [file]
+  })
 }
 
 function hasClipboardImage(clipboardData: DataTransfer | null): boolean {
   return Array.from(clipboardData?.items ?? []).some((item) => item.type.startsWith('image/'))
-}
-
-function findClipboardImage(clipboardData: DataTransfer | null): File | undefined {
-  if (clipboardData === null) {
-    return undefined
-  }
-  for (const item of clipboardData.items) {
-    if (item.kind === 'file' && item.type.startsWith('image/')) {
-      return item.getAsFile() ?? undefined
-    }
-  }
-  return undefined
 }
 
 export async function saveClipboardBitmap(saveImage: (bytes: Uint8Array) => Promise<string>): Promise<string> {
