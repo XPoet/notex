@@ -94,6 +94,10 @@ Command → Service → Repository → SQLite / File System
 - Markdown 源码编辑器使用 CodeMirror 6。
 - Vue 组件不得直接调用原始 `invoke()`。
 
+工作台分栏使用 `src/features/workspace/` 中的二叉布局树表示，叶子记录分栏 ID 与笔记 ID，分支记录水平或垂直拆分。`NoteWorkspace` 在稳定父级通过 keyed Teleport 将编辑器放入各叶子的容器，避免拆分或合并重建 CodeMirror 实例。布局不持久化。
+
+`notes` Store 按笔记 ID 维护共享编辑会话，包含正文草稿、修订号、保存状态与错误；`selectedNote` 表示活动分栏的笔记。所有分栏共用 `flush()` 保存屏障，离开页面和关闭应用前保存全部待写草稿；单条笔记失败不阻止其他会话尝试保存。`retainNotes()` 只释放已保存且不再显示的会话；空白笔记清理保护其他分栏仍显示的笔记。分栏的附件和标签使用自身笔记 ID 调用现有 Service，不改变 IPC 或数据库结构。
+
 ## 4. 样式方案
 
 使用 SCSS 和 CSS Custom Properties：

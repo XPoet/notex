@@ -13,9 +13,22 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   select: [id: string]
+  contextMenu: [id: string, event: MouseEvent | KeyboardEvent]
 }>()
 
 const isDragging = shallowRef(false)
+
+function preventContextSelection(event: MouseEvent): void {
+  if (event.button === 2 || (event.button === 0 && event.ctrlKey)) {
+    event.preventDefault()
+  }
+}
+
+function handleContextKey(event: KeyboardEvent): void {
+  if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return
+  event.preventDefault()
+  emit('contextMenu', props.note.id, event)
+}
 
 function startDrag(event: DragEvent): void {
   if (event.dataTransfer === null) return
@@ -38,7 +51,11 @@ const displayTitle = computed(() => {
     draggable="true"
     :title="t('拖动到左侧分类以移动笔记')"
     :aria-current="selected ? 'page' : undefined"
+    aria-haspopup="menu"
     @click="emit('select', note.id)"
+    @mousedown="preventContextSelection"
+    @contextmenu.prevent="emit('contextMenu', note.id, $event)"
+    @keydown="handleContextKey"
     @dragstart="startDrag"
     @dragend="isDragging = false"
   >
@@ -73,6 +90,7 @@ const displayTitle = computed(() => {
   color: inherit;
   cursor: pointer;
   text-align: start;
+  -webkit-user-select: none;
   user-select: none;
 }
 

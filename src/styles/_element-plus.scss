@@ -73,3 +73,10 @@
   justify-content: flex-start;
   margin: 0;
 }
+
+.note-split-layout > .el-splitter-panel {
+  display: grid;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+}
