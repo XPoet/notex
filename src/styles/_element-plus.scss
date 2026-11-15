@@ -69,9 +69,65 @@
   block-size: 28px;
 }
 
-.attachment-context-menu .el-button {
-  justify-content: flex-start;
+.el-dropdown__popper.context-menu-popper {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-8);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-floating);
+}
+
+.context-menu-popper .el-dropdown-menu {
+  display: grid;
+  gap: var(--space-4);
+  min-inline-size: 184px;
+  padding: var(--space-4);
+  border-radius: var(--radius-8);
+  background: var(--color-surface);
+}
+
+.context-menu-popper .el-dropdown-menu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-8) var(--space-12);
+  border-radius: var(--radius-4);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  line-height: 18px;
+}
+
+.context-menu-popper .el-dropdown-menu__item:not(.is-disabled):hover,
+.context-menu-popper .el-dropdown-menu__item:not(.is-disabled):focus {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.context-menu-popper .el-dropdown-menu__item.context-menu-item--danger {
+  color: var(--color-danger);
+}
+
+.context-menu-popper .context-menu-item--danger:not(.is-disabled):hover,
+.context-menu-popper .context-menu-item--danger:not(.is-disabled):focus {
+  background: color-mix(in srgb, var(--color-danger) 8%, var(--color-surface));
+  color: var(--color-danger);
+}
+
+.context-menu-popper .el-dropdown-menu__item .el-icon,
+.context-menu-split-icon {
+  flex: 0 0 18px;
+  inline-size: 18px;
+  block-size: 18px;
   margin: 0;
+  font-size: 18px;
+}
+
+.context-menu-split-icon {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.25;
 }
 
 .note-split-layout > .el-splitter-panel {

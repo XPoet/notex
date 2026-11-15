@@ -278,11 +278,10 @@ async function loadNotesForRoute(category: unknown, tags: unknown, selectedId?: 
   await notesStore.load(selectedId)
 }
 
-async function handleTrash(): Promise<void> {
+async function handleTrash(noteId = selectedNote.value?.id): Promise<void> {
   if (isTrashingNote.value) return
   splitVersion += 1
-  const note = selectedNote.value
-  if (note === undefined) {
+  if (noteId === undefined) {
     return
   }
   const shouldTrash = await ElMessageBox.confirm(t('笔记将移入回收站，之后可恢复。是否继续？'), t('确认删除笔记'), {
@@ -292,18 +291,18 @@ async function handleTrash(): Promise<void> {
   })
     .then(() => true)
     .catch(() => false)
-  if (!shouldTrash) {
+  if (!shouldTrash || isTrashingNote.value) {
     return
   }
   isTrashingNote.value = true
   try {
     await autoSave.flush()
-    await trashNote(note.id)
+    await trashNote(noteId)
     ElMessage.success(t('笔记已移入回收站。'))
-    await notesStore.reloadAfterTrash(note.id)
+    await notesStore.reloadAfterTrash(noteId)
     const replacementId = selectedNote.value?.id
     for (const pane of panes.value) {
-      if (pane.noteId === note.id) layout.value = replacePaneNote(layout.value, pane.id, replacementId)
+      if (pane.noteId === noteId) layout.value = replacePaneNote(layout.value, pane.id, replacementId)
     }
     await categoriesStore.load()
   } catch {
@@ -396,14 +395,16 @@ function handleKeyboardShortcut(event: KeyboardEvent): void {
   }
 }
 
-async function handleTogglePin(): Promise<void> {
-  const note = selectedNote.value
+async function handleTogglePin(noteId: string): Promise<void> {
+  if (isTrashingNote.value) return
+  const note = notes.value.find((item) => item.id === noteId)
   if (note === undefined) return
+  const pinned = !note.isPinned
   try {
-    await notesStore.setPinned(!note.isPinned, note.id)
-    ElMessage.success(note.isPinned ? t('已取消置顶。') : t('笔记已置顶。'))
+    await notesStore.setPinned(pinned, noteId)
+    ElMessage.success(pinned ? t('笔记已收藏。') : t('已取消收藏。'))
   } catch {
-    ElMessage.error(t('无法更新置顶状态。'))
+    ElMessage.error(t('无法更新收藏状态。'))
   }
 }
 
@@ -446,6 +447,8 @@ onBeforeUnmount(() => {
         @retry="handleLoad"
         @select="handleSelect"
         @split="handleSplit"
+        @toggle-pin="handleTogglePin"
+        @trash="handleTrash"
         @search="handleListSearch"
         @load-more="notesStore.loadNext"
       />
@@ -469,8 +472,6 @@ onBeforeUnmount(() => {
             @update="updateNote(pane.id, $event)"
             @update-category="inPane(pane.id, () => handleUpdateCategory($event))"
             @export="inPane(pane.id, handleExport)"
-            @trash="inPane(pane.id, handleTrash)"
-            @toggle-pin="inPane(pane.id, handleTogglePin)"
             @retry="autoSave.flush().catch(() => undefined)"
             @close="handleClosePane(pane.id)"
           />

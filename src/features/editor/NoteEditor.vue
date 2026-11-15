@@ -1,17 +1,6 @@
 <script setup lang="ts">
 import { t, locale } from '@/i18n'
-import {
-  Calendar,
-  Clock,
-  CopyDocument,
-  Delete,
-  Download,
-  Folder,
-  MoreFilled,
-  Paperclip,
-  Star,
-  StarFilled,
-} from '@element-plus/icons-vue'
+import { Calendar, Clock, CopyDocument, Download, Folder, MoreFilled, Paperclip } from '@element-plus/icons-vue'
 import { computed, useTemplateRef, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import EditorStatusBar from './EditorStatusBar.vue'
@@ -48,8 +37,6 @@ const emit = defineEmits<{
   updateTags: [tagIds: string[]]
   createTag: [name: string]
   export: []
-  trash: []
-  togglePin: []
 }>()
 
 const titleInput = useTemplateRef<{ focus: () => void }>('titleInput')
@@ -178,28 +165,10 @@ defineExpose({ focusEditor })
             <el-button
               text
               circle
-              :icon="note.isPinned ? StarFilled : Star"
-              :title="note.isPinned ? t('取消置顶') : t('置顶笔记')"
-              :aria-label="note.isPinned ? t('取消置顶') : t('置顶笔记')"
-              :aria-pressed="note.isPinned"
-              @click="emit('togglePin')"
-            />
-            <el-button
-              text
-              circle
               :icon="Download"
               :title="t('导出笔记')"
               :aria-label="t('导出笔记')"
               @click="emit('export')"
-            />
-            <el-button
-              text
-              type="danger"
-              circle
-              :icon="Delete"
-              :title="t('移入回收站')"
-              :aria-label="t('移入回收站')"
-              @click="emit('trash')"
             />
             <el-popover placement="bottom-end" :width="360" trigger="click">
               <template #reference>

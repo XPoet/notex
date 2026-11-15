@@ -1,4 +1,4 @@
-import { flushPromises, mount } from '@vue/test-utils'
+import { DOMWrapper, flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import MarkdownEditor from '@/features/editor/MarkdownEditor.vue'
 import { assetMarkdown, getNoteAssetReferences } from '@/features/editor/assetReferences'
@@ -31,9 +31,11 @@ function actions(): AttachmentHandlers {
 
 function editor(content = assetMarkdown(asset), attachments = actions()) {
   return mount(MarkdownEditor, {
+    attachTo: document.body,
     props: { noteId: 'note', modelValue: content, saveImage: vi.fn(), attachments, assets: [asset] },
     global: {
       stubs: {
+        Transition: false,
         ElPopover: { props: ['visible'], template: '<div v-if="visible"><slot /></div>' },
         ElButton: { template: '<button><slot /></button>' },
         ElImageViewer: true,
@@ -92,17 +94,23 @@ describe('笔记附件', () => {
     const attachments = actions()
     const wrapper = editor(undefined, attachments)
     for (const [label, handler] of [
+      ['用默认应用打开', attachments.open],
       ['在文件管理器中显示', attachments.reveal],
       ['另存为', attachments.saveAs],
     ] as const) {
       await wrapper.get('.cm-attachment-preview').trigger('contextmenu', { clientX: 100, clientY: 100 })
-      const button = wrapper.findAll('[role="menuitem"]').find((item) => item.text() === label)
+      await vi.waitFor(() => expect(new DOMWrapper(document.body).findAll('[role="menuitem"]')).toHaveLength(4))
+      expect(
+        new DOMWrapper(document.body).findAll('[role="menuitem"]').every((item) => item.find('svg').exists()),
+      ).toBe(true)
+      const button = new DOMWrapper(document.body).findAll('[role="menuitem"]').find((item) => item.text() === label)
       expect(button).toBeDefined()
       await button?.trigger('click')
       expect(handler).toHaveBeenCalledWith(asset.relativePath)
     }
     await wrapper.get('.cm-attachment-preview').trigger('contextmenu')
-    await wrapper
+    await vi.waitFor(() => expect(new DOMWrapper(document.body).findAll('[role="menuitem"]')).toHaveLength(4))
+    await new DOMWrapper(document.body)
       .findAll('[role="menuitem"]')
       .find((item) => item.text() === '从笔记中移除')
       ?.trigger('click')
@@ -129,7 +137,26 @@ describe('笔记附件', () => {
     target.element.dispatchEvent(left)
     expect(left.defaultPrevented).toBe(false)
     await target.trigger('contextmenu', { button: 2 })
-    expect(wrapper.get('[role="menu"]').exists()).toBe(true)
+    await vi.waitFor(() => expect(new DOMWrapper(document.body).findAll('[role="menuitem"]')).toHaveLength(4))
+    expect(new DOMWrapper(document.body).get('[role="menu"]').exists()).toBe(true)
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('资源菜单支持键盘导航，Escape 关闭并返回编辑器', async () => {
+    const wrapper = editor()
+    wrapper.get<HTMLElement>('.cm-content').element.tabIndex = 0
+    await wrapper.get('.cm-attachment-preview').trigger('contextmenu')
+    const body = new DOMWrapper(document.body)
+    await vi.waitFor(() => expect(body.findAll('[role="menuitem"]')).toHaveLength(4))
+    const items = body.findAll('[role="menuitem"]')
+    await vi.waitFor(() => expect(document.activeElement).toBe(items[0]?.element))
+    await items[0]?.trigger('keydown', { key: 'ArrowDown', code: 'ArrowDown' })
+    await flushPromises()
+    expect(document.activeElement).toBe(items[1]?.element)
+    await items[1]?.trigger('keydown', { key: 'Escape', code: 'Escape' })
+    expect(body.find('[role="menu"]').exists()).toBe(false)
+    expect(document.activeElement).toBe(wrapper.get('.cm-content').element)
     expect(wrapper.emitted('update:modelValue')).toBeUndefined()
     wrapper.unmount()
   })
@@ -221,7 +248,8 @@ describe('笔记附件', () => {
     const second = `[乙](./${asset.relativePath})`
     const wrapper = editor(`${first} 和 ${second}`)
     await wrapper.findAll('.cm-attachment-preview')[0]?.trigger('contextmenu')
-    await wrapper
+    await vi.waitFor(() => expect(new DOMWrapper(document.body).findAll('[role="menuitem"]')).toHaveLength(4))
+    await new DOMWrapper(document.body)
       .findAll('[role="menuitem"]')
       .find((item) => item.text() === '从笔记中移除')
       ?.trigger('click')

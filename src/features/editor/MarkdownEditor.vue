@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Compartment, EditorState } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
-import { onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef, watch } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef, watch } from 'vue'
 import { transferFiles, useClipboardPaste } from './useClipboardPaste'
 import AttachmentContextMenu from './AttachmentContextMenu.vue'
 import { getNoteAssetReferences } from './assetReferences'
@@ -205,7 +205,7 @@ function handleContextMenu(event: MouseEvent): boolean {
 
 function handleContextAction(action: 'open' | 'reveal' | 'saveAs' | 'remove'): void {
   const reference = contextMenu.value?.reference
-  contextMenu.value = undefined
+  closeContextMenu(action === 'remove')
   const view = editorView.value
   if (reference === undefined || view === undefined) return
   if (action === 'remove') {
@@ -215,10 +215,14 @@ function handleContextAction(action: 'open' | 'reveal' | 'saveAs' | 'remove'): v
       selection: { anchor: reference.from },
     })
     history.breakGroup()
-    view.focus()
   } else {
     void props.attachments?.[action](reference.relativePath).catch(reportAssetError)
   }
+}
+
+function closeContextMenu(restoreFocus = false): void {
+  contextMenu.value = undefined
+  if (restoreFocus) void nextTick(() => editorView.value?.focus())
 }
 
 function handleDrop(event: DragEvent): boolean {
@@ -413,10 +417,11 @@ onBeforeUnmount(() => {
 <template>
   <div ref="editorHost" class="markdown-editor" @contextmenu="handleContextMenu">
     <AttachmentContextMenu
-      :visible="contextMenu !== undefined"
-      :x="contextMenu?.x ?? 0"
-      :y="contextMenu?.y ?? 0"
-      @close="contextMenu = undefined"
+      v-if="contextMenu !== undefined"
+      :key="`${contextMenu.reference.from}:${contextMenu.x}:${contextMenu.y}`"
+      :x="contextMenu.x"
+      :y="contextMenu.y"
+      @close="closeContextMenu"
       @action="handleContextAction"
     />
     <NoteImageViewer

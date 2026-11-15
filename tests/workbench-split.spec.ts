@@ -5,14 +5,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { notePage, noteSaveResult } from './helpers/note-page'
 import type { NoteDetail } from '@/types/notes'
 
-const { invoke, messages } = vi.hoisted(() => ({
+const { invoke, messages, confirm } = vi.hoisted(() => ({
   invoke: vi.fn(),
+  confirm: vi.fn(),
   messages: { error: vi.fn(), success: vi.fn() },
 }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke }))
 vi.mock('element-plus', async (importOriginal) => ({
   ...(await importOriginal<typeof import('element-plus')>()),
   ElMessage: messages,
+  ElMessageBox: { confirm },
 }))
 
 import WorkbenchView from '@/views/WorkbenchView.vue'
@@ -39,6 +41,7 @@ beforeEach(() => {
     updatedAt: '2026-11-01T00:00:00Z',
   }))
   vi.clearAllMocks()
+  confirm.mockResolvedValue('confirm')
   invoke.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
     switch (command) {
       case 'list_note_page':
@@ -64,6 +67,9 @@ beforeEach(() => {
         records = records.map((note) => (note.id === args?.id ? { ...note, isPinned: args.pinned === true } : note))
         return records.find((note) => note.id === args?.id)
       }
+      case 'trash_note':
+        records = records.filter((note) => note.id !== args?.id)
+        return undefined
       case 'set_note_category':
         records = records.map((note) =>
           note.id === args?.noteId
@@ -233,16 +239,20 @@ describe('工作台笔记分栏', () => {
     expect(wrapper.find('.note-pane-close').exists()).toBe(false)
   })
 
-  it('非活动分栏的置顶和导出操作作用于该分栏笔记，导出范围在切换分栏后保持不变', async () => {
+  it('列表收藏不切换活动分栏，非活动栏导出范围在切栏后保持不变', async () => {
     const { wrapper, store, editorAt, split } = await host()
     await split('b', 'right')
     expect(store.selectedNote?.id).toBe('b')
-    editorAt(0).vm.$emit('togglePin')
+    wrapper.getComponent(NoteList).vm.$emit('togglePin', 'a')
     await flushPromises()
 
     expect(invoke).toHaveBeenCalledWith('set_note_pinned', { id: 'a', pinned: true })
     expect(records[0]?.isPinned).toBe(true)
     expect(records[1]?.isPinned).toBe(false)
+    expect(store.selectedNote?.id).toBe('b')
+    wrapper.getComponent(NoteList).vm.$emit('togglePin', 'a')
+    await flushPromises()
+    expect(invoke).toHaveBeenCalledWith('set_note_pinned', { id: 'a', pinned: false })
     await wrapper.get('[data-pane-id="pane-2"]').trigger('pointerdown')
     editorAt(0).vm.$emit('export')
     await flushPromises()
@@ -252,6 +262,51 @@ describe('工作台笔记分栏', () => {
     await wrapper.get('[data-pane-id="pane-2"]').trigger('pointerdown')
     expect(store.selectedNote?.id).toBe('b')
     expect(wrapper.getComponent(ExportDialog).props('scopeOptions')[0]?.scope).toEqual({ kind: 'note', id: 'a' })
+  })
+
+  it('删除未选中的笔记时保存草稿并保留当前笔记，取消删除不会写入', async () => {
+    const { wrapper, store, editorAt, noteIds } = await host()
+    editorAt(0).vm.$emit('update', { title: 'A 的草稿', content: '删除 B 前保存的 A' })
+    confirm.mockRejectedValueOnce('cancel')
+    wrapper.getComponent(NoteList).vm.$emit('trash', 'b')
+    await flushPromises()
+    expect(invoke).not.toHaveBeenCalledWith('trash_note', { id: 'b' })
+    expect(noteIds()).toEqual(['a'])
+
+    wrapper.getComponent(NoteList).vm.$emit('trash', 'b')
+    await flushPromises()
+    expect(invoke).toHaveBeenCalledWith('trash_note', { id: 'b' })
+    expect(records.map((note) => note.id)).toEqual(['a', 'c'])
+    expect(records[0]?.content).toBe('删除 B 前保存的 A')
+    expect(store.selectedNote?.id).toBe('a')
+    expect(noteIds()).toEqual(['a'])
+  })
+
+  it('删除多栏共享的笔记后替换相关分栏，保留其他分栏的正文', async () => {
+    const { wrapper, store, editorAt, noteIds, split } = await host()
+    await split('a', 'right')
+    await split('b', 'down')
+    editorAt(2).vm.$emit('update', { title: 'B 的草稿', content: '删除 A 后保留的 B' })
+    wrapper.getComponent(NoteList).vm.$emit('trash', 'a')
+    await flushPromises()
+
+    expect(invoke).toHaveBeenCalledWith('trash_note', { id: 'a' })
+    expect(noteIds()).toEqual(['b', 'b', 'b'])
+    expect(store.selectedNote?.id).toBe('b')
+    expect(editorAt(2).props('note')?.content).toBe('删除 A 后保留的 B')
+  })
+
+  it('草稿保存失败时阻止删除，并保留编辑内容供重试', async () => {
+    const { wrapper, editorAt, noteIds } = await host()
+    editorAt(0).vm.$emit('update', { title: 'A 的草稿', content: '保存失败后保留的 A' })
+    saveFailures.add('a')
+    wrapper.getComponent(NoteList).vm.$emit('trash', 'b')
+    await flushPromises()
+
+    expect(invoke).not.toHaveBeenCalledWith('trash_note', { id: 'b' })
+    expect(noteIds()).toEqual(['a'])
+    expect(editorAt(0).props('saveStatus')).toBe('failed')
+    expect(editorAt(0).props('note')?.content).toBe('保存失败后保留的 A')
   })
 
   it('导出等待保存期间切换活动分栏，仍导出触发操作的笔记', async () => {

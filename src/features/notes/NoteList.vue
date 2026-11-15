@@ -2,7 +2,7 @@
 import { t, localizeMessage } from '@/i18n'
 import { Search } from '@element-plus/icons-vue'
 import type { ScrollbarInstance } from 'element-plus'
-import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, shallowRef, useTemplateRef, watch } from 'vue'
 import NoteListItem from './NoteListItem.vue'
 import NoteContextMenu from './NoteContextMenu.vue'
 import type { NoteSummary } from '@/types/notes'
@@ -27,10 +27,13 @@ const emit = defineEmits<{
   search: [query: string]
   loadMore: []
   split: [id: string, direction: 'right' | 'down']
+  togglePin: [id: string]
+  trash: [id: string]
 }>()
 
 const query = shallowRef('')
 const contextMenu = shallowRef<{ id: string; x: number; y: number; trigger?: HTMLElement }>()
+const contextNote = computed(() => props.notes.find((note) => note.id === contextMenu.value?.id))
 const listItems = useTemplateRef<ScrollbarInstance>('listItems')
 const scrollTop = shallowRef(0)
 const viewportHeight = shallowRef(600)
@@ -71,14 +74,27 @@ function openContextMenu(id: string, event: MouseEvent | KeyboardEvent): void {
 }
 
 function closeContextMenu(restoreFocus = false): void {
-  if (restoreFocus) contextMenu.value?.trigger?.focus()
+  const trigger = contextMenu.value?.trigger
   contextMenu.value = undefined
+  if (restoreFocus) void nextTick(() => trigger?.focus())
 }
 
 function splitNote(direction: 'right' | 'down'): void {
   const noteId = contextMenu.value?.id
   closeContextMenu()
   if (noteId !== undefined) emit('split', noteId, direction)
+}
+
+function togglePin(): void {
+  const noteId = contextMenu.value?.id
+  closeContextMenu(true)
+  if (noteId !== undefined) emit('togglePin', noteId)
+}
+
+function trashNote(): void {
+  const noteId = contextMenu.value?.id
+  closeContextMenu(true)
+  if (noteId !== undefined) emit('trash', noteId)
 }
 
 watch([() => props.loading, () => props.notes, query], () => closeContextMenu())
@@ -164,11 +180,14 @@ onBeforeUnmount(() => {
       </el-button>
     </el-scrollbar>
     <NoteContextMenu
-      v-if="contextMenu !== undefined"
+      v-if="contextMenu !== undefined && contextNote !== undefined"
       :key="`${contextMenu.id}:${contextMenu.x}:${contextMenu.y}`"
       :x="contextMenu.x"
       :y="contextMenu.y"
+      :is-pinned="contextNote.isPinned"
       @split="splitNote"
+      @toggle-pin="togglePin"
+      @trash="trashNote"
       @close="closeContextMenu"
     />
   </section>

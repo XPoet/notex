@@ -1,6 +1,6 @@
-import { DOMWrapper, mount } from '@vue/test-utils'
+import { DOMWrapper, flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
-import { nextTick, ref } from 'vue'
+import { ref } from 'vue'
 import NoteList from '@/features/notes/NoteList.vue'
 import NoteContextMenu from '@/features/notes/NoteContextMenu.vue'
 import type { NoteSummary } from '@/types/notes'
@@ -17,13 +17,17 @@ function createNotes(count: number): NoteSummary[] {
   }))
 }
 
+function menuItems() {
+  return new DOMWrapper(document.body).findAll('[role="menuitem"]')
+}
+
 describe('NoteList', () => {
   it('右键未选中的笔记显示带图标的拆分菜单，并传递该笔记及拆分方向', async () => {
     const wrapper = mount(NoteList, {
+      attachTo: document.body,
       props: { notes: createNotes(2), loading: false, selectedId: 'note-0' },
       global: {
         stubs: {
-          Teleport: true,
           ElButton: { template: '<button><slot /></button>' },
           ElIcon: { template: '<i><slot /></i>' },
           ElInput: { template: '<input />' },
@@ -33,15 +37,19 @@ describe('NoteList', () => {
     })
     const target = wrapper.findAll('.note-list-item')[1]
     await target?.trigger('contextmenu', { clientX: 300, clientY: 200 })
-    const items = wrapper.findAll('[role="menuitem"]')
-    expect(items.map((item) => item.text())).toEqual(['向右拆分', '向下拆分'])
+    await vi.waitFor(() => expect(menuItems()).toHaveLength(4))
+    const items = menuItems()
+    expect(items.map((item) => item.text())).toEqual(['向右拆分', '向下拆分', '收藏笔记', '删除笔记'])
     expect(items.every((item) => item.find('svg').exists())).toBe(true)
     expect(wrapper.emitted('select')).toBeUndefined()
+    await items[0]?.trigger('pointerdown')
+    expect(menuItems()).toHaveLength(4)
     await items[0]?.trigger('click')
     expect(wrapper.emitted('split')).toEqual([['note-1', 'right']])
-    expect(wrapper.find('[role="menu"]').exists()).toBe(false)
+    expect(new DOMWrapper(document.body).find('[role="menu"]').exists()).toBe(false)
     await target?.trigger('contextmenu', { clientX: 300, clientY: 200 })
-    await wrapper.findAll('[role="menuitem"]')[1]?.trigger('click')
+    await vi.waitFor(() => expect(menuItems()).toHaveLength(4))
+    await menuItems()[1]?.trigger('click')
     expect(wrapper.emitted('split')?.[1]).toEqual(['note-1', 'down'])
     wrapper.unmount()
   })
@@ -52,6 +60,7 @@ describe('NoteList', () => {
       props: { notes: createNotes(1), loading: false },
       global: {
         stubs: {
+          Transition: false,
           ElButton: { template: '<button><slot /></button>' },
           ElIcon: { template: '<i><slot /></i>' },
           ElInput: { template: '<input />' },
@@ -62,13 +71,16 @@ describe('NoteList', () => {
     const target = wrapper.get<HTMLButtonElement>('.note-list-item')
     target.element.focus()
     await target.trigger('keydown', { key: 'F10', shiftKey: true })
-    await nextTick()
     const body = new DOMWrapper(document.body)
+    await vi.waitFor(() => expect(body.findAll('[role="menuitem"]')).toHaveLength(4))
     const items = body.findAll('[role="menuitem"]')
-    expect(document.activeElement).toBe(items[0]?.element)
-    await items[0]?.trigger('keydown', { key: 'ArrowDown' })
+    expect(body.get('[role="menu"]').attributes('aria-labelledby')).toBeTruthy()
+    await vi.waitFor(() => expect(document.activeElement).toBe(items[0]?.element))
+    await items[0]?.trigger('keydown', { key: 'ArrowDown', code: 'ArrowDown' })
+    await flushPromises()
     expect(document.activeElement).toBe(items[1]?.element)
-    await items[1]?.trigger('keydown', { key: 'Home' })
+    await items[1]?.trigger('keydown', { key: 'Home', code: 'Home' })
+    await flushPromises()
     expect(document.activeElement).toBe(items[0]?.element)
     await items[0]?.trigger('keydown', { key: 'Escape' })
     expect(body.find('[role="menu"]').exists()).toBe(false)
@@ -77,21 +89,50 @@ describe('NoteList', () => {
     wrapper.unmount()
   })
 
-  it('菜单避开窗口边界，点击外部和窗口失焦时关闭', async () => {
-    const bounds = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 184, 84))
+  it('点击外部和窗口失焦时关闭菜单', async () => {
     const wrapper = mount(NoteContextMenu, {
-      props: { x: window.innerWidth, y: window.innerHeight },
+      props: { x: 300, y: 200, isPinned: false },
     })
-    const menu = new DOMWrapper(document.body).get<HTMLElement>('[role="menu"]')
-    await nextTick()
-    await nextTick()
-    expect(menu.element.style.left).toBe(`${window.innerWidth - 184 - 8}px`)
-    expect(menu.element.style.top).toBe(`${window.innerHeight - 84 - 8}px`)
+    await vi.waitFor(() => expect(document.querySelector('[role="menuitem"]')).not.toBeNull())
     window.dispatchEvent(new Event('pointerdown', { bubbles: true }))
     window.dispatchEvent(new Event('blur'))
     expect(wrapper.emitted('close')).toHaveLength(2)
     wrapper.unmount()
-    bounds.mockRestore()
+  })
+
+  it('收藏和删除作用于右键笔记，已收藏时提供取消收藏', async () => {
+    const notes = createNotes(2)
+    const wrapper = mount(NoteList, {
+      attachTo: document.body,
+      props: { notes, loading: false, selectedId: 'note-0' },
+      global: {
+        stubs: {
+          ElInput: { template: '<input />' },
+          ElScrollbar: { template: '<div><slot /></div>' },
+        },
+      },
+    })
+    const target = wrapper.findAll('.note-list-item')[1]
+    await target?.trigger('contextmenu', { clientX: 300, clientY: 200 })
+    await vi.waitFor(() => expect(menuItems()).toHaveLength(4))
+    await menuItems()[2]?.trigger('click')
+    expect(wrapper.emitted('togglePin')).toEqual([['note-1']])
+    expect(new DOMWrapper(document.body).find('[role="menu"]').exists()).toBe(false)
+
+    await wrapper.setProps({ notes: notes.map((note) => ({ ...note, isPinned: note.id === 'note-1' })) })
+    await target?.trigger('contextmenu', { clientX: 300, clientY: 200 })
+    await vi.waitFor(() => expect(menuItems()).toHaveLength(4))
+    expect(menuItems()[2]?.text()).toBe('取消收藏')
+    await menuItems()[2]?.trigger('click')
+    expect(wrapper.emitted('togglePin')).toEqual([['note-1'], ['note-1']])
+
+    await target?.trigger('contextmenu', { clientX: 300, clientY: 200 })
+    await vi.waitFor(() => expect(menuItems()).toHaveLength(4))
+    await menuItems()[3]?.trigger('click')
+    expect(wrapper.emitted('trash')).toEqual([['note-1']])
+    expect(wrapper.emitted('select')).toBeUndefined()
+    expect(new DOMWrapper(document.body).find('[role="menu"]').exists()).toBe(false)
+    wrapper.unmount()
   })
 
   it('显示当前分类标题', () => {

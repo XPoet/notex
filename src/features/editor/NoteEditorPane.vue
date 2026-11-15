@@ -28,8 +28,6 @@ const emit = defineEmits<{
   update: [change: Pick<NoteDetail, 'title' | 'content'>]
   updateCategory: [categoryId: string | undefined]
   export: []
-  trash: []
-  togglePin: []
   retry: []
   close: []
 }>()
@@ -170,8 +168,6 @@ defineExpose({ focusEditor: () => noteEditor.value?.focusEditor() })
       @update-tags="handleUpdateTags"
       @create-tag="handleCreateTag"
       @export="emit('export')"
-      @trash="emit('trash')"
-      @toggle-pin="emit('togglePin')"
       @retry="emit('retry')"
       @paste-error="imageError = $event"
     />
