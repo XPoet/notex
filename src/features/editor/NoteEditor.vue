@@ -8,6 +8,7 @@ import {
   Download,
   Folder,
   MoreFilled,
+  Paperclip,
   Star,
   StarFilled,
 } from '@element-plus/icons-vue'
@@ -22,6 +23,7 @@ import type { CategoryNode } from '@/types/categories'
 import type { SaveStatus as SaveStatusType } from '@/stores/notes'
 import type { NoteDetail } from '@/types/notes'
 import type { TagSummary } from '@/types/tags'
+import type { AttachmentHandlers, SavedAsset } from '@/types/assets'
 
 const props = defineProps<{
   note?: NoteDetail
@@ -33,6 +35,9 @@ const props = defineProps<{
   tags: TagSummary[]
   selectedTagIds: string[]
   searchQuery?: string
+  attachments?: AttachmentHandlers
+  assets?: readonly SavedAsset[]
+  assetRevision?: number
 }>()
 
 const emit = defineEmits<{
@@ -48,7 +53,7 @@ const emit = defineEmits<{
 }>()
 
 const titleInput = useTemplateRef<{ focus: () => void }>('titleInput')
-const markdownEditor = useTemplateRef<{ focus: () => void }>('markdownEditor')
+const markdownEditor = useTemplateRef<{ focus: () => void; insertAttachments: () => Promise<void> }>('markdownEditor')
 const noteId = computed(() => props.note?.id)
 const noteCategoryPath = computed(() => findCategoryPath(props.categories, props.note?.categoryId) ?? t('未分类'))
 const noteTags = computed(() => props.tags.filter((tag) => props.selectedTagIds.includes(tag.id)))
@@ -154,6 +159,15 @@ defineExpose({ focusEditor })
           </p>
           <div class="note-editor-actions">
             <el-button
+              v-if="attachments !== undefined"
+              text
+              circle
+              :icon="Paperclip"
+              :title="t('添加附件')"
+              :aria-label="t('添加附件')"
+              @click="markdownEditor?.insertAttachments()"
+            />
+            <el-button
               text
               circle
               :icon="CopyDocument"
@@ -213,6 +227,9 @@ defineExpose({ focusEditor })
           class="note-editor-markdown"
           :model-value="note.content"
           :save-image="saveImage"
+          :attachments="attachments"
+          :assets="assets"
+          :asset-revision="assetRevision"
           :search-query="searchQuery"
           @update:model-value="updateContent"
           @paste-error="emit('pasteError', $event)"
@@ -223,7 +240,7 @@ defineExpose({ focusEditor })
   </section>
   <section v-else class="editor-empty-state">
     <h1 class="editor-empty-title">{{ t('打开即记') }}</h1>
-    <p class="editor-empty-copy">{{ t('从左侧新建一条笔记，纯文本和图片都会保存在本机。') }}</p>
+    <p class="editor-empty-copy">{{ t('从左侧新建一条笔记，文本、图片和附件都会保存在本机。') }}</p>
   </section>
 </template>
 

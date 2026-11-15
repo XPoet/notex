@@ -1,5 +1,5 @@
 use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use image::{ImageReader, Limits};
@@ -8,7 +8,8 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use uuid::Uuid;
 
 use crate::database::connection::open_database;
-use crate::domain::assets::{AssetError, AssetHealth, SavedAsset};
+use crate::domain::asset_references::{is_identifier, is_managed_path};
+use crate::domain::assets::{AssetError, AssetHealth, AttachmentBatch, SavedAsset};
 use crate::repositories::assets::AssetsRepository;
 
 pub struct AssetsService {
@@ -27,36 +28,69 @@ impl AssetsService {
     }
 
     pub fn save_pasted_image(&self, note_id: &str, bytes: &[u8]) -> Result<SavedAsset, AssetError> {
+        if bytes.len() > MAX_ATTACHMENT_BYTES {
+            return Err(AssetError::FileTooLarge);
+        }
         let metadata = ImageMetadata::detect(bytes)?;
-        let hash = format!("{:x}", Sha256::digest(bytes));
+        let name = format!(
+            "截图-{}.{}",
+            OffsetDateTime::now_utc().unix_timestamp_nanos(),
+            metadata.extension
+        );
+        self.save_attachment(note_id, &name, bytes)
+    }
+
+    pub fn save_attachment(
+        &self,
+        note_id: &str,
+        name: &str,
+        bytes: &[u8],
+    ) -> Result<SavedAsset, AssetError> {
+        if bytes.len() > MAX_ATTACHMENT_BYTES {
+            return Err(AssetError::FileTooLarge);
+        }
+        validate_original_name(name)?;
+        let metadata = attachment_metadata(name, bytes)?;
         let now = current_time()?;
         let mut connection =
             open_database(&self.database_path).map_err(|_| AssetError::StorageUnavailable)?;
-
-        if !AssetsRepository::note_exists(&connection, note_id)? {
+        if !is_identifier(note_id) || !AssetsRepository::note_exists(&connection, note_id)? {
             return Err(AssetError::NoteNotFound);
         }
-        if let Some(asset) = AssetsRepository::find_by_hash(&connection, &hash)? {
-            AssetsRepository::link_existing(&mut connection, note_id, &asset.id, &now)?;
-            return Ok(asset);
-        }
-
         self.ensure_storage_directories()?;
+        let directory = self.assets_directory.join(note_id);
+        fs::create_dir_all(&directory).map_err(map_storage_error)?;
+        let root = self
+            .assets_directory
+            .canonicalize()
+            .map_err(map_storage_error)?;
+        if fs::symlink_metadata(&directory)
+            .map_err(map_storage_error)?
+            .file_type()
+            .is_symlink()
+        {
+            return Err(AssetError::StorageUnavailable);
+        }
+        let directory = directory.canonicalize().map_err(map_storage_error)?;
+        if !directory.starts_with(&root) {
+            return Err(AssetError::StorageUnavailable);
+        }
         let id = Uuid::new_v4().to_string();
-        let file_name = format!("{id}.{}", metadata.extension);
-        let relative_path = format!("assets/{file_name}");
+        let relative_path = format!("assets/{note_id}/{id}.{}", metadata.extension);
         let temporary_path = self.temp_directory.join(format!("{id}.tmp"));
-        let final_path = self.assets_directory.join(&file_name);
+        let final_path = directory.join(format!("{id}.{}", metadata.extension));
         write_atomically(&temporary_path, &final_path, bytes)?;
-
         let asset = SavedAsset {
             id,
             relative_path,
+            original_name: name.to_owned(),
             mime_type: metadata.mime_type.to_owned(),
             width: metadata.width,
             height: metadata.height,
-            size: i64::try_from(bytes.len()).map_err(|_| AssetError::InvalidImageData)?,
+            size: i64::try_from(bytes.len()).map_err(|_| AssetError::FileTooLarge)?,
+            modified_at: modified_at(&final_path),
         };
+        let hash = format!("{:x}", Sha256::digest(bytes));
         if let Err(error) =
             AssetsRepository::create_and_link(&mut connection, note_id, &asset, &hash, &now)
         {
@@ -66,10 +100,221 @@ impl AssetsService {
         Ok(asset)
     }
 
+    pub fn import_file(&self, note_id: &str, source: &Path) -> Result<SavedAsset, AssetError> {
+        let path = source.canonicalize().map_err(|_| AssetError::ReadFailed)?;
+        if !path.is_file() {
+            return Err(AssetError::ReadFailed);
+        }
+        let name = source
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or(AssetError::UnsupportedFile)?;
+        let bytes = read_bounded(&path)?;
+        self.save_attachment(note_id, name, &bytes)
+    }
+
+    pub fn import_files(
+        &self,
+        note_id: &str,
+        sources: &[PathBuf],
+    ) -> Result<AttachmentBatch, AssetError> {
+        if sources.len() > 100 {
+            return Err(AssetError::UnsupportedFile);
+        }
+        let mut batch = AttachmentBatch {
+            assets: Vec::new(),
+            failed_names: Vec::new(),
+        };
+        for source in sources {
+            match self.import_file(note_id, source) {
+                Ok(asset) => batch.assets.push(asset),
+                Err(_) => batch.failed_names.push(
+                    source
+                        .file_name()
+                        .and_then(|value| value.to_str())
+                        .unwrap_or("附件")
+                        .to_owned(),
+                ),
+            }
+        }
+        Ok(batch)
+    }
+
+    pub fn validated_path(
+        &self,
+        note_id: &str,
+        relative_path: &str,
+    ) -> Result<PathBuf, AssetError> {
+        let path = self.linked_path(note_id, relative_path)?;
+        let name = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .ok_or(AssetError::ReadFailed)?;
+        attachment_metadata(name, &read_bounded(&path)?)?;
+        Ok(path)
+    }
+
+    pub fn save_copy(
+        &self,
+        note_id: &str,
+        relative_path: &str,
+        target: &Path,
+    ) -> Result<(), AssetError> {
+        let source = self.validated_path(note_id, relative_path)?;
+        let parent = target
+            .parent()
+            .ok_or(AssetError::ExportFailed)?
+            .canonicalize()
+            .map_err(|_| AssetError::ExportFailed)?;
+        let name = target.file_name().ok_or(AssetError::ExportFailed)?;
+        let target = parent.join(name);
+        if target == source {
+            return Err(AssetError::ExportFailed);
+        }
+        let temporary = parent.join(format!(".notex-{}.tmp", Uuid::new_v4()));
+        write_atomically(&temporary, &target, &read_bounded(&source)?)
+            .map_err(|_| AssetError::ExportFailed)
+    }
+
+    pub fn list(&self, note_id: &str) -> Result<Vec<SavedAsset>, AssetError> {
+        let mut connection =
+            open_database(&self.database_path).map_err(|_| AssetError::StorageUnavailable)?;
+        if !AssetsRepository::note_exists(&connection, note_id)? {
+            return Err(AssetError::NoteNotFound);
+        }
+        let mut assets = AssetsRepository::list(&connection, note_id)?;
+        for asset in &mut assets {
+            let Ok(path) = resolve_asset_path(&self.assets_directory, &asset.relative_path) else {
+                asset.modified_at = None;
+                continue;
+            };
+            let current_modified = modified_at(&path);
+            if asset.modified_at == current_modified && current_modified.is_some() {
+                continue;
+            }
+            let Ok(bytes) = read_bounded(&path) else {
+                asset.modified_at = None;
+                continue;
+            };
+            let Ok(metadata) = attachment_metadata(&asset.original_name, &bytes) else {
+                asset.modified_at = None;
+                continue;
+            };
+            asset.width = metadata.width;
+            asset.height = metadata.height;
+            asset.size = i64::try_from(bytes.len()).map_err(|_| AssetError::FileTooLarge)?;
+            asset.modified_at = current_modified;
+            AssetsRepository::refresh_metadata(
+                &mut connection,
+                asset,
+                &format!("{:x}", Sha256::digest(&bytes)),
+            )?;
+        }
+        Ok(assets)
+    }
+
     pub fn health(&self, note_id: &str) -> Result<AssetHealth, AssetError> {
         let connection =
             open_database(&self.database_path).map_err(|_| AssetError::StorageUnavailable)?;
-        AssetsRepository::health(&connection, &self.assets_directory, note_id)
+        if !AssetsRepository::note_exists(&connection, note_id)? {
+            return Err(AssetError::NoteNotFound);
+        }
+        let assets = AssetsRepository::list(&connection, note_id)?;
+        let missing = assets
+            .iter()
+            .filter(|asset| {
+                resolve_asset_path(&self.assets_directory, &asset.relative_path).is_err()
+            })
+            .count();
+        Ok(AssetHealth {
+            missing_asset_count: u32::try_from(missing).map_err(|_| AssetError::ReadFailed)?,
+        })
+    }
+
+    pub fn linked_path(&self, note_id: &str, relative_path: &str) -> Result<PathBuf, AssetError> {
+        let connection =
+            open_database(&self.database_path).map_err(|_| AssetError::StorageUnavailable)?;
+        if !AssetsRepository::is_linked(&connection, note_id, relative_path)? {
+            return Err(AssetError::ReadFailed);
+        }
+        resolve_asset_path(&self.assets_directory, relative_path)
+    }
+
+    /// Copy first, switch each association transactionally, and retain original files.
+    /// Missing old images keep their original references and are retried at next startup.
+    pub fn migrate_legacy(&self) -> Result<(), AssetError> {
+        let mut connection =
+            open_database(&self.database_path).map_err(|_| AssetError::StorageUnavailable)?;
+        let links = AssetsRepository::legacy_links(&connection)?;
+        for (note_id, old) in links {
+            if !is_identifier(&note_id) {
+                return Err(AssetError::SaveFailed);
+            }
+            let Ok(source) = resolve_asset_path(&self.assets_directory, &old.relative_path) else {
+                continue;
+            };
+            let Ok(bytes) = read_bounded(&source) else {
+                continue;
+            };
+            let Ok(metadata) = attachment_metadata(&old.original_name, &bytes) else {
+                continue;
+            };
+            self.ensure_storage_directories()?;
+            let directory = self.assets_directory.join(&note_id);
+            fs::create_dir_all(&directory).map_err(map_storage_error)?;
+            let canonical_root = self
+                .assets_directory
+                .canonicalize()
+                .map_err(map_storage_error)?;
+            if !directory
+                .canonicalize()
+                .map_err(map_storage_error)?
+                .starts_with(&canonical_root)
+            {
+                return Err(AssetError::StorageUnavailable);
+            }
+            let id = Uuid::new_v4().to_string();
+            let target = directory.join(format!("{id}.{}", metadata.extension));
+            write_atomically(
+                &self.temp_directory.join(format!("{id}.tmp")),
+                &target,
+                &bytes,
+            )?;
+            let copied = match read_bounded(&target) {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    let _ = fs::remove_file(&target);
+                    return Err(error);
+                }
+            };
+            if Sha256::digest(&copied) != Sha256::digest(&bytes) {
+                let _ = fs::remove_file(&target);
+                return Err(AssetError::WriteFailed);
+            }
+            let asset = SavedAsset {
+                id: id.clone(),
+                relative_path: format!("assets/{note_id}/{id}.{}", metadata.extension),
+                original_name: old.original_name,
+                mime_type: metadata.mime_type.to_owned(),
+                width: metadata.width,
+                height: metadata.height,
+                size: i64::try_from(bytes.len()).map_err(|_| AssetError::FileTooLarge)?,
+                modified_at: modified_at(&target),
+            };
+            let hash = format!("{:x}", Sha256::digest(&bytes));
+            if let Err(error) = AssetsRepository::migrate_link(
+                &mut connection,
+                &note_id,
+                &old.id,
+                &asset,
+                &hash,
+                &current_time()?,
+            ) {
+                let _ = fs::remove_file(&target);
+                return Err(error);
+            }
+        }
+        Ok(())
     }
 
     pub fn read_note_image(
@@ -112,22 +357,8 @@ impl AssetsService {
         note_id: &str,
         relative_path: &str,
     ) -> Result<Vec<u8>, AssetError> {
-        let connection =
-            open_database(&self.database_path).map_err(|_| AssetError::StorageUnavailable)?;
-        if !AssetsRepository::is_linked(&connection, note_id, relative_path)? {
-            return Err(AssetError::ReadFailed);
-        }
-        let path = controlled_asset_path(&self.assets_directory, relative_path)
-            .map_err(|_| AssetError::ReadFailed)?;
-        let directory = self
-            .assets_directory
-            .canonicalize()
-            .map_err(|_| AssetError::ReadFailed)?;
-        let path = path.canonicalize().map_err(|_| AssetError::ReadFailed)?;
-        if !path.starts_with(directory) || !path.is_file() {
-            return Err(AssetError::ReadFailed);
-        }
-        let bytes = fs::read(path).map_err(|_| AssetError::ReadFailed)?;
+        let path = self.linked_path(note_id, relative_path)?;
+        let bytes = read_bounded(&path)?;
         if !matches!(
             image::guess_format(&bytes),
             Ok(image::ImageFormat::Png
@@ -174,6 +405,17 @@ impl AssetsService {
         let mut pending_count = 0;
         for relative_path in paths {
             let file_path = controlled_asset_path(&self.assets_directory, &relative_path)?;
+            if file_path.try_exists().map_err(|_| AssetError::ReadFailed)?
+                && resolve_asset_path(&self.assets_directory, &relative_path).is_err()
+            {
+                AssetsRepository::mark_cleanup_failed(
+                    &mut connection,
+                    &relative_path,
+                    "ASSET_PATH_INVALID",
+                )?;
+                pending_count += 1;
+                continue;
+            }
             match fs::remove_file(file_path) {
                 Ok(()) => {
                     AssetsRepository::mark_cleanup_succeeded(&mut connection, &relative_path)?;
@@ -197,6 +439,21 @@ impl AssetsService {
     fn ensure_storage_directories(&self) -> Result<(), AssetError> {
         fs::create_dir_all(&self.assets_directory).map_err(map_storage_error)?;
         fs::create_dir_all(&self.temp_directory).map_err(map_storage_error)?;
+        let root = self
+            .assets_directory
+            .parent()
+            .ok_or(AssetError::StorageUnavailable)?
+            .canonicalize()
+            .map_err(map_storage_error)?;
+        for directory in [&self.assets_directory, &self.temp_directory] {
+            if !directory
+                .canonicalize()
+                .map_err(map_storage_error)?
+                .starts_with(&root)
+            {
+                return Err(AssetError::StorageUnavailable);
+            }
+        }
         Ok(())
     }
 }
@@ -205,14 +462,125 @@ fn controlled_asset_path(
     assets_directory: &Path,
     relative_path: &str,
 ) -> Result<PathBuf, AssetError> {
-    let Some(file_name) = relative_path.strip_prefix("assets/") else {
-        return Err(AssetError::SaveFailed);
-    };
-    let path = Path::new(file_name);
-    if path.components().count() != 1 || path.file_name().is_none() {
+    if !is_managed_path(relative_path) {
         return Err(AssetError::SaveFailed);
     }
-    Ok(assets_directory.join(file_name))
+    let relative = relative_path
+        .strip_prefix("assets/")
+        .ok_or(AssetError::SaveFailed)?;
+    Ok(assets_directory.join(relative))
+}
+
+pub(super) fn resolve_asset_path(
+    assets_directory: &Path,
+    relative_path: &str,
+) -> Result<PathBuf, AssetError> {
+    let path = controlled_asset_path(assets_directory, relative_path)?;
+    let root = assets_directory
+        .canonicalize()
+        .map_err(|_| AssetError::ReadFailed)?;
+    let data_root = assets_directory
+        .parent()
+        .ok_or(AssetError::ReadFailed)?
+        .canonicalize()
+        .map_err(|_| AssetError::ReadFailed)?;
+    if !root.starts_with(&data_root) {
+        return Err(AssetError::ReadFailed);
+    }
+    let mut component_path = assets_directory.to_path_buf();
+    for component in relative_path
+        .strip_prefix("assets/")
+        .ok_or(AssetError::ReadFailed)?
+        .split('/')
+    {
+        component_path.push(component);
+        if fs::symlink_metadata(&component_path)
+            .map_err(|_| AssetError::ReadFailed)?
+            .file_type()
+            .is_symlink()
+        {
+            return Err(AssetError::ReadFailed);
+        }
+    }
+    let path = path.canonicalize().map_err(|_| AssetError::ReadFailed)?;
+    if !path.starts_with(root) || !path.is_file() {
+        return Err(AssetError::ReadFailed);
+    }
+    Ok(path)
+}
+
+const MAX_ATTACHMENT_BYTES: usize = 100 * 1024 * 1024;
+
+fn read_bounded(path: &Path) -> Result<Vec<u8>, AssetError> {
+    let file = fs::File::open(path).map_err(|_| AssetError::ReadFailed)?;
+    if file.metadata().map_err(|_| AssetError::ReadFailed)?.len() > MAX_ATTACHMENT_BYTES as u64 {
+        return Err(AssetError::FileTooLarge);
+    }
+    let mut bytes = Vec::new();
+    file.take(MAX_ATTACHMENT_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| AssetError::ReadFailed)?;
+    if bytes.len() > MAX_ATTACHMENT_BYTES {
+        return Err(AssetError::FileTooLarge);
+    }
+    Ok(bytes)
+}
+
+fn modified_at(path: &Path) -> Option<String> {
+    Some(
+        fs::metadata(path)
+            .ok()?
+            .modified()
+            .ok()?
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?
+            .as_nanos()
+            .to_string(),
+    )
+}
+
+fn validate_original_name(name: &str) -> Result<(), AssetError> {
+    if name.is_empty()
+        || name.len() > 1024
+        || name.contains(['/', '\\'])
+        || name.chars().any(char::is_control)
+    {
+        return Err(AssetError::UnsupportedFile);
+    }
+    Ok(())
+}
+
+struct AttachmentMetadata {
+    extension: &'static str,
+    mime_type: &'static str,
+    width: Option<u32>,
+    height: Option<u32>,
+}
+
+fn attachment_metadata(name: &str, bytes: &[u8]) -> Result<AttachmentMetadata, AssetError> {
+    let extension = name
+        .rsplit_once('.')
+        .map(|(_, extension)| extension.to_ascii_lowercase())
+        .ok_or(AssetError::UnsupportedFile)?;
+    if matches!(extension.as_str(), "png" | "jpg" | "jpeg" | "webp" | "gif") {
+        let image = ImageMetadata::detect(bytes)?;
+        if extension != image.extension && !(extension == "jpeg" && image.extension == "jpg") {
+            return Err(AssetError::UnsupportedFile);
+        }
+        return Ok(AttachmentMetadata {
+            extension: image.extension,
+            mime_type: image.mime_type,
+            width: Some(image.width),
+            height: Some(image.height),
+        });
+    }
+    let (extension, mime_type) = super::file_formats::detect(&extension, bytes)?;
+    Ok(AttachmentMetadata {
+        extension,
+        mime_type,
+        width: None,
+        height: None,
+    })
 }
 
 fn write_atomically(
@@ -484,8 +852,7 @@ mod tests {
     }
 
     #[test]
-    fn persists_png_and_reuses_an_existing_asset_for_another_note()
-    -> Result<(), Box<dyn std::error::Error>> {
+    fn persists_independent_copies_for_each_note() -> Result<(), Box<dyn std::error::Error>> {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |duration| duration.as_nanos());
@@ -515,7 +882,12 @@ mod tests {
                 .is_err()
         );
         let reused = service.save_pasted_image(&second_note.id, &png)?;
-        assert_eq!(asset.id, reused.id);
+        assert_ne!(asset.id, reused.id);
+        assert!(
+            reused
+                .relative_path
+                .starts_with(&format!("assets/{}/", second_note.id))
+        );
         assert!(root.join(&asset.relative_path).is_file());
         assert_eq!(service.health(&first_note.id)?.missing_asset_count, 0);
         Ok(())
@@ -574,5 +946,130 @@ mod tests {
         let mut cursor = std::io::Cursor::new(Vec::new());
         image.write_to(&mut cursor, image::ImageFormat::Png)?;
         Ok(cursor.into_inner())
+    }
+    #[test]
+    fn stores_named_documents_and_refreshes_external_edits_without_changing_other_notes()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let (root, service, note_id) = preview_fixture()?;
+        let other = NotesService::new(&root).create()?;
+        let original = b"%PDF-1.7\noriginal\n%%EOF";
+        let file = service.save_attachment(&note_id, "报告 [终稿].pdf", original)?;
+        let separate = service.save_attachment(&other.id, "报告 [终稿].pdf", original)?;
+        assert_eq!(file.original_name, "报告 [终稿].pdf");
+        assert_eq!(file.width, None);
+        assert_ne!(file.id, separate.id);
+        let edited = b"%PDF-1.7\nexternally edited document\n%%EOF";
+        std::fs::write(root.join(&file.relative_path), edited)?;
+        let refreshed = service.list(&note_id)?;
+        assert_eq!(refreshed[0].size, edited.len() as i64);
+        assert_eq!(std::fs::read(root.join(separate.relative_path))?, original);
+        assert!(service.linked_path(&other.id, &file.relative_path).is_err());
+        assert!(
+            service
+                .save_attachment(&note_id, "伪装.pdf", b"executable")
+                .is_err()
+        );
+        assert!(
+            service
+                .save_attachment(&note_id, "../outside.pdf", original)
+                .is_err()
+        );
+        assert!(
+            service
+                .validated_path(&note_id, "assets/../database/notex.db")
+                .is_err()
+        );
+        Ok(())
+    }
+
+    fn legacy_fixture()
+    -> Result<(std::path::PathBuf, AssetsService, String, String), Box<dyn std::error::Error>> {
+        let (root, service, first) = preview_fixture()?;
+        let second = NotesService::new(&root).create()?.id;
+        std::fs::create_dir_all(root.join("assets"))?;
+        std::fs::write(root.join("assets/legacy.png"), valid_png()?)?;
+        let mut connection =
+            crate::database::connection::open_database(&root.join("database/notex.db"))?;
+        let transaction = connection.transaction()?;
+        transaction.execute("INSERT INTO assets (id, file_name, original_name, extension, relative_path, mime_type, size, width, height, hash, created_at) VALUES ('legacy', 'legacy.png', '旧图.png', 'png', 'assets/legacy.png', 'image/png', 1, 1, 1, 'legacy', '2026-01-01T00:00:00Z')", [])?;
+        for id in [&first, &second] {
+            transaction.execute("INSERT INTO note_assets (note_id, asset_id, created_at) VALUES (?1, 'legacy', '2026-01-01T00:00:00Z')", [id])?;
+            transaction.execute("UPDATE notes SET content = '![旧图](./assets/legacy.png)', updated_at = '2026-01-01T00:00:00Z' WHERE id = ?1", [id])?;
+        }
+        transaction.commit()?;
+        Ok((root, service, first, second))
+    }
+
+    #[test]
+    fn migration_copies_shared_images_rewrites_recovery_and_preserves_originals_idempotently()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let (root, service, first, second) = legacy_fixture()?;
+        let notes = NotesService::new(&root);
+        notes.save_recovery_draft(
+            &first,
+            "草稿",
+            "恢复 ![图](./assets/legacy.png)",
+            "NOTE_SAVE_FAILED",
+        )?;
+        crate::services::trash::TrashService::new(&root).trash(&second)?;
+        service.migrate_legacy()?;
+        service.migrate_legacy()?;
+        let first_asset = service.list(&first)?.remove(0);
+        let connection =
+            crate::database::connection::open_database(&root.join("database/notex.db"))?;
+        let second_asset =
+            crate::repositories::assets::AssetsRepository::list(&connection, &second)?.remove(0);
+        assert_ne!(first_asset.relative_path, second_asset.relative_path);
+        assert!(root.join("assets/legacy.png").is_file());
+        assert_eq!(
+            std::fs::read(root.join(&first_asset.relative_path))?,
+            valid_png()?
+        );
+        assert_eq!(notes.get(&first)?.updated_at, "2026-01-01T00:00:00Z");
+        assert!(
+            notes
+                .get(&first)?
+                .content
+                .contains(&first_asset.relative_path)
+        );
+        let draft: String = connection.query_row(
+            "SELECT content FROM recovery_drafts WHERE note_id = ?1",
+            [&first],
+            |row| row.get(0),
+        )?;
+        assert!(draft.contains(&first_asset.relative_path));
+        assert_eq!(
+            connection.query_row("SELECT COUNT(*) FROM assets", [], |row| row
+                .get::<_, u32>(0))?,
+            2
+        );
+        crate::services::trash::TrashService::new(&root).restore(&second)?;
+        assert!(
+            service
+                .read_note_image(&second, &second_asset.relative_path)
+                .is_ok()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn failed_migration_keeps_original_associations_and_cleans_only_its_new_copy()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let (root, service, first, _) = legacy_fixture()?;
+        let connection =
+            crate::database::connection::open_database(&root.join("database/notex.db"))?;
+        connection.execute_batch("CREATE TRIGGER reject_copy BEFORE INSERT ON note_assets WHEN NEW.asset_id != 'legacy' BEGIN SELECT RAISE(ABORT, 'injected'); END;")?;
+        assert!(service.migrate_legacy().is_err());
+        assert!(root.join("assets/legacy.png").is_file());
+        assert_eq!(
+            NotesService::new(&root).get(&first)?.content,
+            "![旧图](./assets/legacy.png)"
+        );
+        assert_eq!(
+            connection.query_row("SELECT COUNT(*) FROM assets", [], |row| row
+                .get::<_, u32>(0))?,
+            1
+        );
+        Ok(())
     }
 }

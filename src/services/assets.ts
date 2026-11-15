@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import type { AssetError, AssetErrorCode, AssetHealth, SavedAsset } from '@/types/assets'
+import type { AssetError, AssetErrorCode, AssetHealth, AttachmentBatch, SavedAsset } from '@/types/assets'
 
 interface TauriErrorPayload {
   code?: unknown
@@ -15,10 +15,60 @@ const assetErrorCodes: AssetErrorCode[] = [
   'ASSET_WRITE_FAILED',
   'ASSET_SAVE_FAILED',
   'ASSET_READ_FAILED',
+  'ASSET_UNSUPPORTED_FILE',
+  'ASSET_FILE_TOO_LARGE',
+  'ASSET_OPEN_FAILED',
+  'ASSET_EXPORT_FAILED',
+  'ASSET_CLIPBOARD_FAILED',
 ]
 
 function isTauriErrorPayload(value: unknown): value is TauriErrorPayload {
   return typeof value === 'object' && value !== null
+}
+
+async function assetCommand<T>(command: string, args: Record<string, unknown>): Promise<T> {
+  try {
+    return await invoke<T>(command, args)
+  } catch (error: unknown) {
+    throw toAssetError(error)
+  }
+}
+
+export async function saveNoteAttachment(noteId: string, file: File): Promise<SavedAsset> {
+  if (file.size > 100 * 1024 * 1024) {
+    throw toAssetError({ code: 'ASSET_FILE_TOO_LARGE', message: '附件大小超过 100 MiB。' })
+  }
+  try {
+    return await invoke<SavedAsset>('save_note_attachment', await file.arrayBuffer(), {
+      headers: { 'x-note-id': noteId, 'x-file-name': encodeURIComponent(file.name) },
+    })
+  } catch (error: unknown) {
+    throw toAssetError(error)
+  }
+}
+
+export function chooseNoteAttachments(noteId: string): Promise<AttachmentBatch> {
+  return assetCommand('choose_note_attachments', { noteId })
+}
+
+export function pasteNoteAttachments(noteId: string): Promise<AttachmentBatch> {
+  return assetCommand('paste_note_attachments', { noteId })
+}
+
+export function listNoteAssets(noteId: string): Promise<SavedAsset[]> {
+  return assetCommand('list_note_assets', { noteId })
+}
+
+export function openNoteAsset(noteId: string, relativePath: string): Promise<void> {
+  return assetCommand('open_note_asset', { noteId, relativePath })
+}
+
+export function revealNoteAsset(noteId: string, relativePath: string): Promise<void> {
+  return assetCommand('reveal_note_asset', { noteId, relativePath })
+}
+
+export function saveNoteAssetAs(noteId: string, relativePath: string): Promise<void> {
+  return assetCommand('save_note_asset_as', { noteId, relativePath })
 }
 
 function isAssetErrorCode(value: unknown): value is AssetErrorCode {
@@ -31,7 +81,7 @@ export function toAssetError(error: unknown): AssetError {
   }
   return {
     code: 'ASSET_SAVE_FAILED',
-    message: '图片资源保存失败，未插入图片引用。',
+    message: '资源保存失败，未插入资源引用。',
   }
 }
 

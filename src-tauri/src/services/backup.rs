@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Component, Path, PathBuf};
@@ -11,9 +10,7 @@ use zip::{
 use crate::database::connection::open_database;
 use crate::domain::export::{ExportError, ExportScopeKind};
 use crate::repositories::export::{ExportCategory, ExportRepository};
-use crate::services::export::{
-    ExportLayout, asset_reference, controlled_asset_file_name, replace_asset_reference,
-};
+use crate::services::export::ExportLayout;
 
 pub struct BackupService {
     data_directory: PathBuf,
@@ -67,8 +64,6 @@ impl BackupService {
             }];
             let uncategorized_directory =
                 layout.markdown_directory(ExportScopeKind::Category, "", "", &uncategorized)?;
-            let mut copied_assets = HashSet::new();
-            let mut copied_names = HashSet::new();
             for note in snapshot.notes {
                 let directory = if note.category_path.is_empty() {
                     uncategorized_directory.clone()
@@ -80,45 +75,27 @@ impl BackupService {
                         &note.category_path,
                     )?
                 };
-                let markdown_path = layout.markdown_path(&directory, &note.title, &note.id)?;
-                let mut content = note.content;
-                for asset in note.assets {
-                    let name = controlled_asset_file_name(&asset)?;
-                    if name.contains(['/', '\\']) {
-                        return Err(ExportError::Write);
-                    }
-                    let reference = asset_reference(&markdown_path, Path::new(""), name)?;
-                    content = replace_asset_reference(&content, &asset.relative_path, &reference);
-                    if !copied_assets.insert(asset.id.clone()) {
-                        continue;
-                    }
-                    if !copied_names.insert(name.to_owned()) {
-                        return Err(ExportError::Write);
-                    }
-                    let assets_directory = root
-                        .join("assets")
-                        .canonicalize()
-                        .map_err(|_| ExportError::Write)?;
-                    let source_path = assets_directory
-                        .join(name)
-                        .canonicalize()
-                        .map_err(|_| ExportError::Write)?;
-                    if !assets_directory.starts_with(&root)
-                        || !source_path.starts_with(&assets_directory)
-                    {
+                let plan = layout.plan_note(&directory, &note)?;
+                for asset in plan.assets {
+                    let source_path = crate::services::assets::resolve_asset_path(
+                        &root.join("assets"),
+                        &asset.source.relative_path,
+                    )
+                    .map_err(|_| ExportError::Write)?;
+                    if !source_path.starts_with(&root) {
                         return Err(ExportError::Write);
                     }
                     let mut source = File::open(source_path).map_err(|_| ExportError::Write)?;
                     archive
-                        .start_file(format!("assets/{name}"), options)
+                        .start_file(archive_path(&asset.target)?, options)
                         .map_err(|_| ExportError::Write)?;
                     io::copy(&mut source, archive).map_err(|_| ExportError::Write)?;
                 }
                 archive
-                    .start_file(archive_path(&markdown_path)?, options)
+                    .start_file(archive_path(&plan.markdown_path)?, options)
                     .map_err(|_| ExportError::Write)?;
                 archive
-                    .write_all(content.as_bytes())
+                    .write_all(plan.content.as_bytes())
                     .map_err(|_| ExportError::Write)?;
             }
             if empty && password.is_some() {
@@ -409,6 +386,7 @@ fn archive_path(path: &Path) -> Result<String, ExportError> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
     use std::io::Read;
 
     use rusqlite::params;
@@ -498,38 +476,32 @@ mod tests {
             .file_names()
             .map(str::to_owned)
             .collect::<HashSet<_>>();
-        assert_eq!(names.len(), 7);
+        assert_eq!(names.len(), 8);
         for path in [
-            "工作/说明.md",
+            "工作/说明/说明.md",
+            "工作/说明/image.png",
             "工作/项目/说明.md",
-            "工作/项目/说明-2.md",
+            "工作/项目/说明/说明.md",
+            "工作/项目/说明/image.png",
             "未分类/说明.md",
             "未分类-2/说明.md",
-            "assets-2/说明.md",
-            "assets/image.png",
+            "assets/说明.md",
         ] {
             assert!(names.contains(path), "missing {path}");
         }
         assert!(!names.iter().any(|name| name.contains("回收站")));
         let mut markdown = String::new();
         archive
-            .by_name("工作/项目/说明.md")?
+            .by_name("工作/项目/说明/说明.md")?
             .read_to_string(&mut markdown)?;
-        // 同名笔记的顺序由快照排序决定，检查包含图片的那一篇。
-        if !markdown.contains("![图片]") {
-            markdown.clear();
-            archive
-                .by_name("工作/项目/说明-2.md")?
-                .read_to_string(&mut markdown)?;
-        }
-        assert_eq!(markdown, "![图片](../../assets/image.png)");
+        assert_eq!(markdown, "![图片](./image.png)");
         let note = archive.by_name("未分类/说明.md")?;
         assert_eq!(note.compression(), CompressionMethod::Deflated);
         assert!(note.compressed_size() < note.size());
         drop(note);
         let mut image = Vec::new();
         archive
-            .by_name("assets/image.png")?
+            .by_name("工作/说明/image.png")?
             .read_to_end(&mut image)?;
         assert_eq!(image, b"png");
         Ok(())
@@ -609,7 +581,7 @@ mod tests {
         let password = "  备份🔒123  ";
         BackupService::new(&directory).create_latest(Some(password))?;
         let mut archive = ZipArchive::new(File::open(latest(&directory))?)?;
-        assert_eq!(archive.len(), 7);
+        assert_eq!(archive.len(), 8);
         for index in 0..archive.len() {
             assert!(archive.by_index(index).is_err());
             assert!(
@@ -629,7 +601,7 @@ mod tests {
         }
         let mut image = Vec::new();
         archive
-            .by_name_decrypt("assets/image.png", password.as_bytes())?
+            .by_name_decrypt("工作/说明/image.png", password.as_bytes())?
             .read_to_end(&mut image)?;
         assert_eq!(image, b"png");
         assert_eq!(fs::read_dir(directory.join("backups"))?.count(), 1);

@@ -21,7 +21,7 @@
 | 字段            | 类型      | 说明                                            |
 | --------------- | --------- | ----------------------------------------------- |
 | `status`        | `'ready'` | 初始化成功时固定为 `ready`                      |
-| `schemaVersion` | number    | 最后成功执行的 Migration 版本；当前 V004 为 `4` |
+| `schemaVersion` | number    | 最后成功执行的 Migration 版本；当前 V005 为 `5` |
 
 ### 失败响应：`BootstrapError`
 
@@ -51,11 +51,11 @@
 
 前端串行保存当前草稿，保存期间若有新的编辑则继续保存最新版本；保存失败时阻止关闭并展示重试提示。保存成功后调用 `exit_application`，无参数，成功返回空值，窗口操作失败复用 `BootstrapError`。重复关闭请求不会启动多份备份。
 
-Command 委托 Shutdown Service 隐藏主窗口；尚未解锁时直接退出，不读取笔记或创建备份。已解锁时等待后台阻塞任务：Backup Service 通过 Export Repository 在同一数据库事务中读取所有未删除笔记、分类层级和关联图片，生成应用数据目录内固定的 `backups/NoteX-latest.zip`。本功能不接受前端路径，也不受手动导出默认目录或当前筛选条件影响。
+Command 委托 Shutdown Service 隐藏主窗口；尚未解锁时直接退出，不读取笔记或创建备份。已解锁时等待后台阻塞任务：Backup Service 通过 Export Repository 在同一数据库事务中读取所有未删除笔记、分类层级和关联资源，生成应用数据目录内固定的 `backups/NoteX-latest.zip`。本功能不接受前端路径，也不受手动导出默认目录或当前筛选条件影响。
 
-ZIP 内按分类层级保存 Markdown，未分类笔记放入“未分类”目录；图片集中保存在 `assets` 并改写相对引用。分类和笔记重名时沿用手动导出的文件名清理、冲突编号规则。回收站、标签、应用设置和数据库文件不参与本次 Markdown 导出。
+ZIP 内按分类层级保存 Markdown，未分类笔记放入“未分类”目录；含附件笔记以笔记名创建目录，Markdown 与引用的图片和文档放在同一目录，重写相对引用。分类和笔记重名时沿用手动导出的文件名清理、冲突编号规则。回收站、标签、应用设置和数据库文件不参与本次 Markdown 导出。
 
-已开启密码时，所有 Markdown 和图片条目以同一开启密码进行 AES-256 ZIP 加密；未开启时使用普通 ZIP。空笔记库在加密模式下写入一个同样加密的 `NoteX-backup.txt` 说明条目，确保空库备份也需要密码。ZIP 文件名不加密，解压工具须支持 AES ZIP。
+已开启密码时，所有 Markdown 和附件条目以同一开启密码进行 AES-256 ZIP 加密；未开启时使用普通 ZIP。空笔记库在加密模式下写入一个同样加密的 `NoteX-backup.txt` 说明条目，确保空库备份也需要密码。ZIP 文件名不加密，解压工具须支持 AES ZIP。
 
 Security Service 在会话锁与数据库写锁内重新读取密码配置，验证内存中的备份密码仍匹配当前哈希，再委托 Backup Service 生成 ZIP；已配置密码但缺少有效会话密码时停止备份，不能回退为无密码压缩包。密码配置和退出备份共用锁，防止并发执行时产生不一致的密码。
 
@@ -75,7 +75,7 @@ Security Service 在会话锁与数据库写锁内重新读取密码配置，验
 
 配置更新先在数据库事务内暂存密码哈希，生成新的 ZIP 并发布后才提交事务，最后清理回滚文件；压缩、发布或提交失败时恢复原配置和原备份，返回 `PASSWORD_BACKUP_SYNC_FAILED` 或 `PASSWORD_SAVE_FAILED`。异常中断留下回滚文件时，根据当前已验证的密码配置检查新旧 ZIP，保留与已提交配置匹配的一份并清理临时文件；无法验证时保留恢复文件并返回同步错误。
 
-安全边界：此功能控制应用启动访问并加密自动备份的文件内容，不加密 SQLite、原始图片或手动导出；有权访问应用数据文件的人仍可直接读取或修改这些文件。
+安全边界：此功能控制应用启动访问并加密自动备份的文件内容，不加密 SQLite、原始附件或手动导出；有权访问应用数据文件的人仍可直接读取或修改这些文件。
 
 错误码：`APP_LOCKED` ｜ `PASSWORD_INCORRECT` ｜ `PASSWORD_VALIDATION_FAILED` ｜ `PASSWORD_READ_FAILED` ｜ `PASSWORD_SAVE_FAILED` ｜ `PASSWORD_BACKUP_SYNC_FAILED` ｜ `PASSWORD_TOO_MANY_ATTEMPTS`。错误只包含稳定码和安全提示，不包含密码、哈希、SQL 或系统路径。
 
@@ -142,40 +142,55 @@ Security Service 在会话锁与数据库写锁内重新读取密码配置，验
 
 请求：`{ id: string, pinned: boolean }`。只作用于未删除笔记；在数据库事务内更新 `is_pinned` 与 `updated_at`，成功后返回更新后的 `NoteDetail`。重复设置相同状态保持幂等。错误码复用笔记错误码。
 
-## 5. 图片资源接口
+## 5. 图片与附件资源接口
 
 ### `save_pasted_image`
 
-请求：`{ noteId: string, bytes: number[] }`。前端只能在编辑器的用户粘贴事件中读取剪贴板文件或系统位图后调用，不传入文件路径、扩展名、MIME 或哈希。
+请求：`{ noteId: string, bytes: number[] }`。用于系统 RGBA 位图转换后的 PNG 等无原始文件名图片，生成截图文件名。保存到 `assets/{note-id}/{asset-id}.{extension}`，不跨笔记去重。响应为 `SavedAsset`。
 
-Rust 必须根据字节文件头识别 PNG、JPEG、WebP 或 GIF，并以受限内存和尺寸的完整解码校验可读性和尺寸；不信任前端类型。原始文件字节可用时直接保存；只有系统仅提供 RGBA 位图时，前端无损编码为 PNG 再请求本接口。服务端以 SHA-256 去重、临时文件加同步和原子移动写入 `assets/{asset-id}.{extension}`，再以事务创建或复用资源记录和笔记关联。任一步失败时不插入 Markdown，也不保留临时或孤立文件。
+### `save_note_attachment`
 
-成功响应：`SavedAsset`。
+请求体为原始二进制 `ArrayBuffer`，通过 `tauri::ipc::Request` 接收。头部 `x-note-id` 为笔记 ID；`x-file-name` 为 `encodeURIComponent` 编码的原始文件名。前端不传路径、MIME 或哈希。Rust 拒绝非法文件名、无效内容和超过 100 MiB 的文件。图片按实际字节完整解码校验，Office 包校验主文档项和内容类型，旧 Office 校验 OLE 流名，PDF 校验文件标记。临时写入、原子移动和数据库事务均在阻塞线程执行。响应为 `SavedAsset`。
 
-| 字段           | 类型   | 说明                                                 |
-| -------------- | ------ | ---------------------------------------------------- |
-| `id`           | string | 稳定资源 UUID                                        |
-| `relativePath` | string | 固定为 `assets/{asset-id}.{extension}`，不含绝对路径 |
-| `mimeType`     | string | 由 Rust 检测出的真实类型                             |
-| `width`        | number | 图片宽度                                             |
-| `height`       | number | 图片高度                                             |
-| `size`         | number | 实际字节数                                           |
+前端粘贴或拖入 File 时，达到 10 MiB 会先展示大小并允许取消；100 MiB 以上在读取前拒绝。系统位图保留原有大图片确认。
 
-前端使用返回值插入 `![图片](./assets/{asset-id}.{extension})`，随后触发自动保存。文件达到或超过 10 MiB 时，必须在调用前显示实际大小并允许用户继续或取消；取消时不得调用原生接口。
+### `choose_note_attachments` / `paste_note_attachments`
 
-### `get_note_asset_health`
+请求：`{ noteId: string }`。前者由 Rust 打开多选文件对话框；后者读取 macOS 原生文件 URL 剪贴板，仅接受文件 URL，不把普通文本路径当作文件。二者均在 Rust 读取文件后保存笔记副本，不把源绝对路径返回前端。一次最多 100 个文件。
 
-请求：`{ noteId: string }`。返回 `AssetHealth { missingAssetCount: number }`。仅返回缺失数量，不向前端公开文件系统路径；大于零时编辑区显示资源缺失提示，原 Markdown 引用保持不变。
+响应：`AttachmentBatch { assets: SavedAsset[], failedNames: string[] }`。取消对话框或剪贴板没有文件返回空数组；部分失败返回成功附件与失败文件名，前端继续插入成功项。其他桌面平台可通过选择文件、拖入和 WebView 提供的 File 数据添加附件；原生文件 URL 剪贴板桥接当前面向 macOS。
+
+### `SavedAsset`
+
+| 字段               | 类型           | 说明                                                                       |
+| ------------------ | -------------- | -------------------------------------------------------------------------- |
+| `id`               | string         | 资源 ID                                                                    |
+| `relativePath`     | string         | 新资源为 `assets/{note-id}/{asset-id}.{extension}`，旧资源可暂时为单层路径 |
+| `originalName`     | string         | 原始文件名；旧资源没有原名时使用原存储文件名                               |
+| `mimeType`         | string         | Rust 校验后的媒体类型                                                      |
+| `width` / `height` | number 或 null | 图片尺寸；非图片为 null                                                    |
+| `size`             | number         | 原始字节大小                                                               |
+| `modifiedAt`       | string 或 null | 文件修改时间标记；缺失或校验失败时刷新结果可为 null                        |
+
+正文使用标准 Markdown：图片为 `![文件名](./assets/...)`，文档为 `[文件名](./assets/...)`；文件名中的反斜杠和方括号需要转义。
+
+### `list_note_assets` / `get_note_asset_health`
+
+请求均为 `{ noteId: string }`，只作用于未删除笔记。前者返回 `SavedAsset[]`，并在外部修改时间变化后更新资源元数据；后者返回 `AssetHealth { missingAssetCount: number }`。窗口重新获得焦点时刷新资源状态与图片预览。原始 Markdown 引用在文件缺失时保留。
+
+### `open_note_asset` / `reveal_note_asset` / `save_note_asset_as`
+
+请求：`{ noteId: string, relativePath: string }`。后端先验证笔记关联和受控路径，再使用默认应用打开、在系统文件管理器定位、或通过原生保存对话框另存为。打开前重新校验文件内容；前端不获得绝对路径，也没有任意文件系统或 Shell 权限。默认软件打开的是笔记管理的副本，外部保存不会影响其他笔记。
+
+“从笔记中移除”通过编辑器正文事务移除当前那一处引用，支持撤销；不发起物理文件删除。资源随笔记永久删除清理。
 
 ### `read_note_image`
 
-请求：`{ noteId: string, relativePath: string, thumbnail?: boolean }`。仅接受当前未删除笔记已关联的 `assets/{file-name}` 资源。Rust 在阻塞线程中验证数据库关联、受控相对路径和规范化后的资源目录范围，拒绝越界路径及指向目录外的符号链接，并校验文件头为支持的图片格式。`thumbnail` 默认 `false`，通过 `tauri::ipc::Response` 返回原始图片字节；`true` 时在受限解码后缩放最长边至最多 1280 像素，返回 PNG 缩略图字节，不公开本机绝对路径。前端收到的数据由 IPC 通道决定：macOS 的 postMessage 通道返回数字数组，其他通道可返回 `ArrayBuffer`；Service 必须先将数字数组转换为 `Uint8Array`，再创建 Blob，以保留原始图片字节。
+请求：`{ noteId: string, relativePath: string, thumbnail?: boolean }`。支持笔记独立目录和旧版单层图片路径，验证数据库关联与受控路径，拒绝符号链接和越界路径。`thumbnail = true` 输出最长边不超过 1280 的 PNG 缩略图；默认返回原始图片字节，原图预览预算为 24 MiB。继续使用 `tauri::ipc::Response`：macOS postMessage 可能返回数字数组，前端 Service 转换成 `Uint8Array` 后创建 Blob。缩略图按可见区域优先、总并发不超过 2、24 MiB 缓存预算调度。
 
-前端 Service 将字节转换为 Blob URL，缩略图固定使用 PNG MIME。编辑区优先为视口附近引用调度缩略图，并在预算内预取其他引用，最多并发读取 2 张，已加载缩略图按编码字节加 RGBA 解码体积估算使用 24 MiB 驻留预算；打开大图时再按需读取一张原图，Rust 以编码字节加宽×高×4估算限制在 24 MiB 内，超额时保留缩略图；关闭或切换时释放原图。所有图片读取共享最多 2 个原生请求许可，卸载时取消排队项并丢弃在途迟到结果。CodeMirror 在正文的本地 Markdown 图片引用所在行直接显示图片，随正文一起滚动；点击可放大、缩放、旋转和切换图片，Esc 关闭。切换笔记、移除图片引用或组件卸载时释放 Blob URL；读取失败显示“图片无法读取”，保留正文引用。CSP 仅为图片增加 `blob:` 来源，不开放通用文件系统权限。
+### 资源错误码
 
-### 图片错误码
-
-`ASSET_NOTE_NOT_FOUND` ｜ `INVALID_IMAGE_DATA` ｜ `UNSUPPORTED_IMAGE_FORMAT` ｜ `IMAGE_DIMENSIONS_INVALID` ｜ `ASSET_STORAGE_UNAVAILABLE` ｜ `ASSET_WRITE_FAILED` ｜ `ASSET_SAVE_FAILED` ｜ `ASSET_READ_FAILED`
+`ASSET_NOTE_NOT_FOUND` ｜ `INVALID_IMAGE_DATA` ｜ `UNSUPPORTED_IMAGE_FORMAT` ｜ `IMAGE_DIMENSIONS_INVALID` ｜ `ASSET_STORAGE_UNAVAILABLE` ｜ `ASSET_WRITE_FAILED` ｜ `ASSET_SAVE_FAILED` ｜ `ASSET_READ_FAILED` ｜ `ASSET_UNSUPPORTED_FILE` ｜ `ASSET_FILE_TOO_LARGE` ｜ `ASSET_OPEN_FAILED` ｜ `ASSET_EXPORT_FAILED` ｜ `ASSET_CLIPBOARD_FAILED`
 
 ## 6. 回收站接口
 
@@ -277,7 +292,7 @@ Rust 必须根据字节文件头识别 PNG、JPEG、WebP 或 GIF，并以受限�
 
 前端通过 Tauri `dialog` 插件选择已存在的目标目录；取消选择时不得发起导出。前端 Service 仅将该选择结果传入 `export_notes`，Rust 仍会验证路径为已规范化的本地目录、拒绝文件和相对路径，并且绝不将目标目录的绝对路径返回给前端。
 
-每次导出会在目标目录中创建一个不覆盖已有文件的 `NoteX 导出-YYYYMMDD-HHmmss` 子目录。结果只返回安全的目录显示名；前端只能使用本次任务的 `jobId` 调用 `open_export_directory`，由 Rust 从受控任务记录中打开目录，不能自行传入路径。
+含附件的笔记导出为 `笔记名/笔记名.md` 与同目录附件；无附件笔记直接导出 Markdown。分类层级保留，文件名清理非法字符并按不区分大小写的规则编号，链接中的特殊字符进行 URL 编码。代码示例和已从正文移除的资源不参与导出。每次导出会在目标目录中创建一个不覆盖已有文件的 `NoteX 导出-YYYYMMDD-HHmmss` 子目录。结果只返回安全的目录显示名；前端只能使用本次任务的 `jobId` 调用 `open_export_directory`，由 Rust 从受控任务记录中打开目录，不能自行传入路径。
 
 ### `export_notes`
 
@@ -291,7 +306,7 @@ Rust 必须根据字节文件头识别 PNG、JPEG、WebP 或 GIF，并以受限�
 | `targetDirectory` | string                                                             | 仅由目录选择器提供；Rust 规范化并验证为本地目录，响应中绝不回传 |
 | `onProgress`      | Tauri `Channel<ExportProgress>`                                    | 每个已处理笔记发送一次，不携带绝对路径或正文                    |
 
-`ExportProgress` 包含 `total`、`processed`、`succeeded`、`failed`、`currentTitle?`。进度以创建任务时的数据库快照为准；回收站笔记永不参与导出。同一笔记和同一资源在单次任务中至多处理一次。
+`ExportProgress` 包含 `total`、`processed`、`succeeded`、`failed`、`currentTitle?`。进度以创建任务时的数据库快照为准；回收站笔记永不参与导出。同一笔记在单次任务中至多处理一次，每篇笔记只复制其正文实际引用的资源；跨笔记共享的旧资源也导出独立副本。
 
 工作台导出弹窗提供“当前笔记”和“当前分类”。“当前分类”使用当前笔记的分类 ID，导出该分类的全部直属笔记，不含子分类，也不受工作台列表筛选条件限制。未分类笔记使用 `{ kind: 'category', id: 'uncategorized' }`，Rust 将其解析为 `category_id IS NULL`；该保留值仅用于 `category` 范围。导出前先保存当前草稿，保存失败时阻止打开导出弹窗。
 

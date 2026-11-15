@@ -222,7 +222,7 @@ mod tests {
             )?;
             let restored = SettingsService::new(&directory, &directory).get("0.1.0")?;
             assert_eq!(restored.language, Some(language));
-            assert_eq!(restored.schema_version, 4);
+            assert_eq!(restored.schema_version, 5);
         }
         Ok(())
     }

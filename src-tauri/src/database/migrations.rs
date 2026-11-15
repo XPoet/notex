@@ -8,7 +8,7 @@ struct Migration {
     sql: &'static str,
 }
 
-const MIGRATIONS: [Migration; 4] = [
+const MIGRATIONS: [Migration; 5] = [
     Migration {
         version: 1,
         name: "V001__initial_schema",
@@ -29,8 +29,13 @@ const MIGRATIONS: [Migration; 4] = [
         name: "V004__note_summaries_and_search_documents",
         sql: include_str!("../../migrations/V004__note_summaries_and_search_documents.sql"),
     },
+    Migration {
+        version: 5,
+        name: "V005__note_attachments",
+        sql: include_str!("../../migrations/V005__note_attachments.sql"),
+    },
 ];
-const LATEST_SCHEMA_VERSION: u32 = 4;
+const LATEST_SCHEMA_VERSION: u32 = 5;
 
 pub fn apply_migrations(connection: &mut Connection) -> Result<u32, BootstrapError> {
     let applied_migrations = read_applied_migrations(connection)?;
@@ -152,7 +157,7 @@ mod tests {
     fn upgrades_v3_without_changing_original_notes_and_builds_stable_documents()
     -> Result<(), Box<dyn std::error::Error>> {
         let mut connection = old_database()?;
-        assert_eq!(apply_migrations(&mut connection)?, 4);
+        assert_eq!(apply_migrations(&mut connection)?, 5);
         let original: (String, String, String, String) = connection.query_row(
             "SELECT title, content, content_preview, updated_at FROM notes WHERE id = 'active'",
             [],
@@ -190,11 +195,11 @@ mod tests {
                 .get::<_, u32>(0))?,
             1
         );
-        assert_eq!(apply_migrations(&mut connection)?, 4);
+        assert_eq!(apply_migrations(&mut connection)?, 5);
         assert_eq!(
             connection.query_row("SELECT COUNT(*) FROM schema_migrations", [], |row| row
                 .get::<_, u32>(0))?,
-            4
+            5
         );
         Ok(())
     }

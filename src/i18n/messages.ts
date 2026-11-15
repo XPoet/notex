@@ -1,5 +1,25 @@
 // 简体中文原文作为键；每项依次为英语、繁体中文。
 export const messages = {
+  '本地资源目录不可用，未插入资源引用。': [
+    'Local attachment storage is unavailable. No reference was inserted.',
+    '本機資源目錄無法使用，未插入資源引用。',
+  ],
+  '资源文件写入失败，未插入资源引用。': [
+    'Unable to write the attachment. No reference was inserted.',
+    '資源檔案寫入失敗，未插入資源引用。',
+  ],
+  '资源保存失败，未插入资源引用。': [
+    'Unable to save the attachment. No reference was inserted.',
+    '資源儲存失敗，未插入資源引用。',
+  ],
+  '资源无法读取，文件缺失或内容无效。': [
+    'Unable to read the attachment. The file is missing or invalid.',
+    '資源無法讀取，檔案缺失或內容無效。',
+  ],
+  '含附件的笔记按笔记名创建目录，Markdown、图片和文件一起导出，使用相对路径引用。': [
+    'Notes with attachments are exported into folders named after each note, with relative links to their images and files.',
+    '含附件的筆記按筆記名稱建立目錄，Markdown、圖片及檔案一起匯出，使用相對路徑引用。',
+  ],
   启动诊断: ['Startup diagnostics', '啟動診斷'],
   无法初始化本地数据: ['Unable to initialize local data', '無法初始化本機資料'],
   重试: ['Retry', '重試'],
@@ -679,5 +699,46 @@ export const messages = {
   '一次最多选择 {value1} 个文件，请分批导入。': [
     'Select up to {value1} files at a time. Please import in batches.',
     '一次最多選擇 {value1} 個檔案，請分批匯入。',
+  ],
+  '打开{value1}': ['Open {value1}', '開啟{value1}'],
+  附件操作: ['Attachment actions', '附件操作'],
+  用默认应用打开: ['Open with default app', '使用預設應用程式開啟'],
+  在文件管理器中显示: ['Show in file manager', '在檔案管理器中顯示'],
+  另存为: ['Save as', '另存新檔'],
+  从笔记中移除: ['Remove from note', '從筆記中移除'],
+  添加附件: ['Add attachment', '新增附件'],
+  '附件大小超过 100 MiB。': ['Attachments must be 100 MiB or smaller.', '附件大小超過 100 MiB。'],
+  '附件添加失败，请重试。': ['Unable to add attachment. Please try again.', '附件新增失敗，請重試。'],
+  '附件操作失败，请重试。': ['Unable to complete attachment action. Please try again.', '附件操作失敗，請重試。'],
+  '附件大小为 {value1}。是否继续添加？': [
+    'The attachment is {value1}. Continue adding it?',
+    '附件大小為 {value1}。是否繼續新增？',
+  ],
+  '以下附件未能添加：{value1}': ['Unable to add these attachments: {value1}', '以下附件無法新增：{value1}'],
+  '不支持的附件格式或文件内容无效。': [
+    'Unsupported attachment format or invalid file contents.',
+    '不支援的附件格式或檔案內容無效。',
+  ],
+  '无法使用默认应用打开附件，请检查文件和默认应用设置。': [
+    'Unable to open the attachment. Check the file and your default app settings.',
+    '無法使用預設應用程式開啟附件，請檢查檔案及預設應用程式設定。',
+  ],
+  '附件另存为失败。': ['Unable to save the attachment copy.', '附件另存新檔失敗。'],
+  '无法读取剪贴板文件。': ['Unable to read clipboard files.', '無法讀取剪貼簿檔案。'],
+  '文本、图片和附件都会保存在本机。': [
+    'Text, images and attachments are saved locally.',
+    '文字、圖片和附件都會儲存在本機。',
+  ],
+  '从左侧新建一条笔记，文本、图片和附件都会保存在本机。': [
+    'Create a note from the left. Text, images and attachments are saved locally.',
+    '從左側新增一則筆記，文字、圖片和附件都會儲存在本機。',
+  ],
+  '导出当前笔记及其引用的图片和附件。': [
+    'Export the current note with its referenced images and attachments.',
+    '匯出目前筆記及其引用的圖片和附件。',
+  ],
+  '有 {value1} 个本地资源缺失。原 Markdown 引用已保留，可在恢复文件后继续使用。': [
+    '{value1} local resources are missing. Their Markdown references are preserved and will work once the files are restored.',
+    '有 {value1} 個本機資源缺失。原 Markdown 引用已保留，可在恢復檔案後繼續使用。',
   ],
 } as const

@@ -113,7 +113,7 @@ function chooseDirectory(): void {
           />
           <p class="export-directory-notice" role="note">
             <el-icon><InfoFilled /></el-icon
-            >{{ t('所有图片统一写入导出目录根目录下的 assets 文件夹，Markdown 使用相对路径引用。') }}
+            >{{ t('含附件的笔记按笔记名创建目录，Markdown、图片和文件一起导出，使用相对路径引用。') }}
           </p>
         </div>
       </section>

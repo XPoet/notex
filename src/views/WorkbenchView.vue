@@ -6,6 +6,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { storeToRefs } from 'pinia'
 import { getNoteAssetHealth, savePastedImage, toAssetError } from '@/services/assets'
 import { useAutoSave } from '@/composables/useAutoSave'
+import { useNoteAttachments } from '@/composables/useNoteAttachments'
+import { assetMarkdown } from '@/features/editor/assetReferences'
 import { useSearchQuery } from '@/composables/useSearchQuery'
 import NoteEditor from '@/features/editor/NoteEditor.vue'
 import ExportDialog from '@/features/export/ExportDialog.vue'
@@ -34,6 +36,12 @@ const searchQuery = computed(
   () => listSearchQuery.value ?? (typeof route.query.search === 'string' ? route.query.search : ''),
 )
 const imageError = shallowRef<string>()
+const noteAttachments = useNoteAttachments(
+  () => selectedNote.value?.id,
+  (message) => {
+    imageError.value = message
+  },
+)
 const isExportDialogVisible = shallowRef(false)
 const isMovingNote = shallowRef(false)
 const isTrashingNote = shallowRef(false)
@@ -48,7 +56,7 @@ const exportScopeOptions = computed<ExportScopeOption[]>(() => {
     {
       scope: { kind: 'note', id: note.id },
       title: t('当前笔记'),
-      description: t('导出当前笔记及其关联的原格式图片。'),
+      description: t('导出当前笔记及其引用的图片和附件。'),
     },
     {
       scope: { kind: 'category', id: note.categoryId ?? UNCATEGORIZED_CATEGORY_ID },
@@ -121,8 +129,8 @@ async function refreshAssetHealth(noteId: string | undefined): Promise<void> {
 }
 
 watch(
-  () => selectedNote.value?.id,
-  (noteId) => {
+  [() => selectedNote.value?.id, () => noteAttachments.revision.value],
+  ([noteId]) => {
     void refreshAssetHealth(noteId)
   },
   { immediate: true },
@@ -191,7 +199,7 @@ async function saveImage(bytes: Uint8Array): Promise<string> {
     const asset = await savePastedImage(note.id, bytes)
     imageError.value = undefined
     await refreshAssetHealth(note.id)
-    return t('![图片](./{value1})', { value1: asset.relativePath })
+    return assetMarkdown(asset)
   } catch (failure: unknown) {
     const assetError = toAssetError(failure)
     imageError.value = assetError.message
@@ -419,6 +427,9 @@ onBeforeUnmount(() => {
         :save-error="error?.message"
         :missing-asset-count="missingAssetCount"
         :save-image="saveImage"
+        :attachments="noteAttachments.handlers"
+        :assets="noteAttachments.assets.value"
+        :asset-revision="noteAttachments.revision.value"
         :categories="categoriesStore.categories"
         :tags="tagsStore.tags"
         :selected-tag-ids="selectedTagIds"

@@ -3,6 +3,8 @@ pub mod backup;
 pub mod bootstrap;
 pub mod categories;
 pub mod export;
+pub mod file_clipboard;
+mod file_formats;
 pub mod imports;
 pub mod notes;
 pub mod search;
