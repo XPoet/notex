@@ -12,7 +12,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <ContextMenu class="attachment-context-menu" :x="x" :y="y" :label="t('附件操作')" @close="emit('close', $event)">
+  <ContextMenu :x="x" :y="y" :label="t('附件操作')" @close="emit('close', $event)">
     <ElDropdownItem :icon="TopRight" @click="emit('action', 'open')">{{ t('用默认应用打开') }}</ElDropdownItem>
     <ElDropdownItem :icon="FolderOpened" @click="emit('action', 'reveal')">{{
       t('在文件管理器中显示')

@@ -1,7 +1,8 @@
 import { t } from '@/i18n'
-import { readImage } from '@tauri-apps/plugin-clipboard-manager'
+import { readClipboardBitmap } from '@/services/clipboard'
 
 const LARGE_IMAGE_BYTES = 10 * 1024 * 1024
+const MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024
 
 export interface ClipboardPasteHandlers {
   insertText: (text: string) => void
@@ -13,24 +14,24 @@ export interface ClipboardPasteHandlers {
 }
 
 export function useClipboardPaste(handlers: ClipboardPasteHandlers): {
-  handlePaste: (event: ClipboardEvent) => Promise<void>
+  handlePaste: (event: ClipboardEvent) => boolean
   handleFiles: (files: readonly File[]) => Promise<void>
 } {
-  async function saveFiles(files: readonly File[]): Promise<string> {
+  async function saveFiles(files: readonly File[], fromClipboard = false): Promise<string> {
     const results: string[] = []
     for (const file of files) {
       try {
-        if (handlers.saveFile !== undefined) {
-          if (file.size > 100 * 1024 * 1024) throw new Error(t('附件大小超过 100 MiB。'))
+        if (file.size > MAX_ATTACHMENT_BYTES) throw new Error(t('附件大小超过 100 MiB。'))
+        if (file.type.startsWith('image/') && (fromClipboard || handlers.saveFile === undefined)) {
+          if (confirmLargeImage(file.size))
+            results.push(await handlers.saveImage(new Uint8Array(await file.arrayBuffer())))
+        } else if (handlers.saveFile !== undefined) {
           if (
             file.size >= LARGE_IMAGE_BYTES &&
             !window.confirm(t('附件大小为 {value1}。是否继续添加？', { value1: formatFileSize(file.size) }))
           )
             continue
           results.push(await handlers.saveFile(file))
-        } else if (file.type.startsWith('image/')) {
-          const bytes = new Uint8Array(await file.arrayBuffer())
-          if (await confirmLargeImage(bytes.byteLength)) results.push(await handlers.saveImage(bytes))
         }
       } catch (error: unknown) {
         handlers.onError(
@@ -50,26 +51,24 @@ export function useClipboardPaste(handlers: ClipboardPasteHandlers): {
     insert(await saveFiles(files), true)
   }
 
-  async function handlePaste(event: ClipboardEvent): Promise<void> {
-    event.preventDefault()
+  async function paste(files: readonly File[], text: string, hasImage: boolean): Promise<void> {
     const insert = handlers.createInserter?.() ?? handlers.insertText
     let markdown = ''
-    let block = false
+    let block = true
     try {
       // Finder may also expose a generated bitmap. Prefer its native file URLs
       // so original bytes and filenames are preserved and large files stay native.
       const pasted = await handlers.pasteFiles?.()
-      const files = transferFiles(event.clipboardData)
       if (pasted !== undefined) {
         markdown = pasted.join('\n')
-        block = true
       } else if (files.length > 0) {
-        markdown = await saveFiles(files)
-        block = true
-      } else if (hasClipboardImage(event.clipboardData)) {
-        markdown = await saveClipboardBitmap(handlers.saveImage)
-        block = true
-      } else markdown = event.clipboardData?.getData('text/plain') ?? ''
+        markdown = await saveFiles(files, true)
+      } else if (hasImage || text === '') {
+        markdown = await saveClipboardBitmap(handlers.saveImage, hasImage)
+      } else {
+        markdown = text
+        block = false
+      }
     } catch (error: unknown) {
       handlers.onError(
         error instanceof Error
@@ -81,6 +80,22 @@ export function useClipboardPaste(handlers: ClipboardPasteHandlers): {
     }
     insert(markdown, block)
   }
+
+  function handlePaste(event: ClipboardEvent): boolean {
+    // WebKit revokes clipboardData access as soon as the paste event finishes.
+    const data = event.clipboardData
+    const files = transferFiles(data)
+    const hasImage =
+      files.some((file) => file.type.startsWith('image/')) ||
+      Array.from(data?.items ?? []).some((item) => item.type.startsWith('image/')) ||
+      Array.from(data?.types ?? []).some((type) => type.startsWith('image/'))
+    if (handlers.pasteFiles === undefined && handlers.saveFile === undefined && !hasImage) return false
+    const text = files.length > 0 || hasImage ? '' : (data?.getData('text/plain') ?? '')
+    event.preventDefault()
+    void paste(files, text, hasImage)
+    return true
+  }
+
   return { handlePaste, handleFiles }
 }
 
@@ -93,36 +108,30 @@ export function transferFiles(data: DataTransfer | null): File[] {
   })
 }
 
-function hasClipboardImage(clipboardData: DataTransfer | null): boolean {
-  return Array.from(clipboardData?.items ?? []).some((item) => item.type.startsWith('image/'))
+async function saveClipboardBitmap(
+  saveImage: (bytes: Uint8Array) => Promise<string>,
+  hasImage: boolean,
+): Promise<string> {
+  const bitmap = await readClipboardBitmap().catch((error: unknown) => {
+    if (hasImage) throw error
+    return undefined
+  })
+  if (bitmap === undefined) return ''
+
+  const canvas = document.createElement('canvas')
+  canvas.width = bitmap.width
+  canvas.height = bitmap.height
+  const context = canvas.getContext('2d')
+  if (context === null) throw new Error(t('当前环境无法处理剪贴板位图。'))
+  context.putImageData(new ImageData(new Uint8ClampedArray(bitmap.rgba), bitmap.width, bitmap.height), 0, 0)
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
+  if (blob === null) throw new Error(t('无法将剪贴板位图编码为 PNG。'))
+  if (blob.size > MAX_ATTACHMENT_BYTES) throw new Error(t('附件大小超过 100 MiB。'))
+  if (!confirmLargeImage(blob.size)) return ''
+  return await saveImage(new Uint8Array(await blob.arrayBuffer()))
 }
 
-export async function saveClipboardBitmap(saveImage: (bytes: Uint8Array) => Promise<string>): Promise<string> {
-  const clipboardImage = await readImage()
-  try {
-    const [size, rgba] = await Promise.all([clipboardImage.size(), clipboardImage.rgba()])
-    const canvas = document.createElement('canvas')
-    canvas.width = size.width
-    canvas.height = size.height
-    const context = canvas.getContext('2d')
-    if (context === null) {
-      throw new Error(t('当前环境无法处理剪贴板位图。'))
-    }
-    context.putImageData(new ImageData(new Uint8ClampedArray(rgba), size.width, size.height), 0, 0)
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
-    if (blob === null) {
-      throw new Error(t('无法将剪贴板位图编码为 PNG。'))
-    }
-    if (!(await confirmLargeImage(blob.size))) {
-      return ''
-    }
-    return await saveImage(new Uint8Array(await blob.arrayBuffer()))
-  } finally {
-    await clipboardImage.close()
-  }
-}
-
-async function confirmLargeImage(size: number): Promise<boolean> {
+function confirmLargeImage(size: number): boolean {
   if (size < LARGE_IMAGE_BYTES) {
     return true
   }
