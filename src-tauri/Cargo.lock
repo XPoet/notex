@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "NoteX"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "argon2",
  "image",
