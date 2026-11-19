@@ -149,6 +149,7 @@ describe('笔记附件', () => {
     await wrapper.get('.cm-attachment-preview').trigger('contextmenu')
     const body = new DOMWrapper(document.body)
     await vi.waitFor(() => expect(body.findAll('[role="menuitem"]')).toHaveLength(4))
+    expect(wrapper.find('.el-dropdown').exists()).toBe(false)
     const items = body.findAll('[role="menuitem"]')
     await vi.waitFor(() => expect(document.activeElement).toBe(items[0]?.element))
     await items[0]?.trigger('keydown', { key: 'ArrowDown', code: 'ArrowDown' })
@@ -178,6 +179,39 @@ describe('笔记附件', () => {
     wrapper.unmount()
   })
 
+  it('在异步查询 Finder 文件前保留剪贴板图片，并保存为内嵌图片', async () => {
+    const attachments = actions()
+    const wrapper = editor('正文', attachments)
+    const imageMarkdown = '![图片](./assets/note/clipboard.png)'
+    const saveImage = vi.mocked(wrapper.props('saveImage')).mockResolvedValue(imageMarkdown)
+    const bytes = new Uint8Array([1, 2, 3])
+    const file = new File([bytes], 'clipboard.png', { type: 'image/png' })
+    Object.defineProperty(file, 'arrayBuffer', { value: async () => bytes.buffer })
+    let readable = true
+    const event = new Event('paste', { bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'clipboardData', {
+      value: {
+        get files() {
+          return readable ? [file] : []
+        },
+        items: [],
+        getData: () => '',
+      },
+    })
+
+    wrapper.get('.cm-content').element.dispatchEvent(event)
+    readable = false
+    await flushPromises()
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(attachments.pasteFiles).toHaveBeenCalledOnce()
+    expect(attachments.saveFile).not.toHaveBeenCalled()
+    expect(saveImage).toHaveBeenCalledWith(bytes)
+    expect(wrapper.emitted('update:modelValue')).toEqual([[`${imageMarkdown}\n正文`]])
+    expect(wrapper.find('.cm-image-preview img').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
   it('Finder 文件粘贴走原生入口，普通文本粘贴保留文本', async () => {
     const attachments = actions()
     vi.mocked(attachments.pasteFiles).mockResolvedValueOnce([assetMarkdown(asset)])
@@ -185,7 +219,11 @@ describe('笔记附件', () => {
     wrapper.get('.cm-content').element.dispatchEvent(pasteEvent())
     await flushPromises()
     expect(wrapper.find('.cm-attachment-preview').exists()).toBe(true)
-    wrapper.get('.cm-content').element.dispatchEvent(pasteEvent([], '正文'))
+    const event = new Event('paste', { bubbles: true, cancelable: true })
+    let text = '正文'
+    Object.defineProperty(event, 'clipboardData', { value: { items: [], getData: () => text } })
+    wrapper.get('.cm-content').element.dispatchEvent(event)
+    text = ''
     await flushPromises()
     expect(wrapper.emitted('update:modelValue')?.at(-1)?.[0]).toContain('正文')
     wrapper.unmount()

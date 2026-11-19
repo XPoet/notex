@@ -119,26 +119,15 @@ function insertNewLine(): boolean {
   return true
 }
 
+const saveFile = props.attachments?.saveFile
 const { handlePaste, handleFiles } = useClipboardPaste({
   insertText,
-  saveImage: props.saveImage,
-  saveFile: props.attachments?.saveFile,
+  saveImage: async (bytes) => (disposed ? '' : props.saveImage(bytes)),
+  saveFile: saveFile === undefined ? undefined : async (file) => (disposed ? '' : saveFile(file)),
   pasteFiles: props.attachments?.pasteFiles,
   createInserter,
   onError: (message) => emit('pasteError', message),
 })
-
-function handlePasteEvent(event: ClipboardEvent): boolean {
-  if (props.attachments === undefined && !hasClipboardImage(event.clipboardData)) {
-    return false
-  }
-  void handlePaste(event)
-  return true
-}
-
-function hasClipboardImage(clipboardData: DataTransfer | null): boolean {
-  return Array.from(clipboardData?.items ?? []).some((item) => item.type.startsWith('image/'))
-}
 
 function reportAssetError(error: unknown): void {
   const message =
@@ -242,10 +231,7 @@ function focusEditorWhenClickingBlankArea(event: MouseEvent): void {
   if (event.button !== 0 || view === undefined || !(event.target instanceof Node)) {
     return
   }
-  if (
-    view.contentDOM.contains(event.target) ||
-    (event.target instanceof Element && event.target.closest('.attachment-context-menu') !== null)
-  ) {
+  if (view.contentDOM.contains(event.target)) {
     return
   }
   view.dispatch({ selection: { anchor: view.state.doc.length } })
@@ -291,7 +277,7 @@ onMounted(() => {
         searchHighlightCompartment.of(searchHighlights(props.searchQuery ?? '')),
         previewField,
         EditorView.domEventHandlers({
-          paste: handlePasteEvent,
+          paste: handlePaste,
           drop: handleDrop,
           dragover: (event) => {
             if (props.attachments === undefined || !Array.from(event.dataTransfer?.types ?? []).includes('Files'))
@@ -416,14 +402,15 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="editorHost" class="markdown-editor" @contextmenu="handleContextMenu">
-    <AttachmentContextMenu
-      v-if="contextMenu !== undefined"
-      :key="`${contextMenu.reference.from}:${contextMenu.x}:${contextMenu.y}`"
-      :x="contextMenu.x"
-      :y="contextMenu.y"
-      @close="closeContextMenu"
-      @action="handleContextAction"
-    />
+    <Teleport v-if="contextMenu !== undefined" to="body">
+      <AttachmentContextMenu
+        :key="`${contextMenu.reference.from}:${contextMenu.x}:${contextMenu.y}`"
+        :x="contextMenu.x"
+        :y="contextMenu.y"
+        @close="closeContextMenu"
+        @action="handleContextAction"
+      />
+    </Teleport>
     <NoteImageViewer
       :images="images"
       :preview-path="previewPath"
