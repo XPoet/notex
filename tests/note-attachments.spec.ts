@@ -1,4 +1,5 @@
 import { DOMWrapper, flushPromises, mount } from '@vue/test-utils'
+import { ElMessage } from 'element-plus'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import MarkdownEditor from '@/features/editor/MarkdownEditor.vue'
 import { assetMarkdown, getNoteAssetReferences } from '@/features/editor/assetReferences'
@@ -25,6 +26,7 @@ function actions(): AttachmentHandlers {
     pasteFiles: vi.fn(async () => undefined),
     open: vi.fn(async () => undefined),
     reveal: vi.fn(async () => undefined),
+    copy: vi.fn(async () => undefined),
     saveAs: vi.fn(async () => undefined),
   }
 }
@@ -99,7 +101,7 @@ describe('笔记附件', () => {
       ['另存为', attachments.saveAs],
     ] as const) {
       await wrapper.get('.cm-attachment-preview').trigger('contextmenu', { clientX: 100, clientY: 100 })
-      await vi.waitFor(() => expect(new DOMWrapper(document.body).findAll('[role="menuitem"]')).toHaveLength(4))
+      await vi.waitFor(() => expect(new DOMWrapper(document.body).findAll('[role="menuitem"]')).toHaveLength(5))
       expect(
         new DOMWrapper(document.body).findAll('[role="menuitem"]').every((item) => item.find('svg').exists()),
       ).toBe(true)
@@ -109,7 +111,7 @@ describe('笔记附件', () => {
       expect(handler).toHaveBeenCalledWith(asset.relativePath)
     }
     await wrapper.get('.cm-attachment-preview').trigger('contextmenu')
-    await vi.waitFor(() => expect(new DOMWrapper(document.body).findAll('[role="menuitem"]')).toHaveLength(4))
+    await vi.waitFor(() => expect(new DOMWrapper(document.body).findAll('[role="menuitem"]')).toHaveLength(5))
     await new DOMWrapper(document.body)
       .findAll('[role="menuitem"]')
       .find((item) => item.text() === '从笔记中移除')
@@ -124,8 +126,13 @@ describe('笔记附件', () => {
   })
 
   it.each(['file', 'image'])('右键或 Control 单击 %s 预览时阻止默认选词，普通左键和菜单继续工作', async (kind) => {
-    const content = kind === 'file' ? assetMarkdown(asset) : '![图片说明.png](./assets/note/image.png)'
-    const wrapper = editor(content)
+    const attachments = actions()
+    const path = kind === 'file' ? asset.relativePath : 'assets/note/image.png'
+    const content = kind === 'file' ? assetMarkdown(asset) : `![图片说明.png](./${path})`
+    const success = vi.spyOn(ElMessage, 'success').mockReturnValue({ close: vi.fn() })
+    const wrapper = editor(content, attachments)
+    const editorContent = wrapper.get<HTMLElement>('.cm-content').element
+    editorContent.tabIndex = 0
     await flushPromises()
     const target = wrapper.get(kind === 'file' ? '.cm-attachment-name' : '.cm-image-caption')
     for (const options of [{ button: 2 }, { button: 0, ctrlKey: true }]) {
@@ -137,9 +144,37 @@ describe('笔记附件', () => {
     target.element.dispatchEvent(left)
     expect(left.defaultPrevented).toBe(false)
     await target.trigger('contextmenu', { button: 2 })
-    await vi.waitFor(() => expect(new DOMWrapper(document.body).findAll('[role="menuitem"]')).toHaveLength(4))
-    expect(new DOMWrapper(document.body).get('[role="menu"]').exists()).toBe(true)
+    const body = new DOMWrapper(document.body)
+    await vi.waitFor(() => expect(body.findAll('[role="menuitem"]')).toHaveLength(5))
+    const copy = body.findAll('[role="menuitem"]').find((item) => item.text() === '复制')
+    expect(copy).toBeDefined()
+    await copy?.trigger('click')
+    await flushPromises()
+    expect(attachments.copy).toHaveBeenCalledExactlyOnceWith(path)
+    expect(success).toHaveBeenCalledWith('附件已复制到剪贴板。')
+    expect(body.find('[role="menu"]').exists()).toBe(false)
+    expect(document.activeElement).toBe(editorContent)
     expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('系统剪贴板写入失败时显示实际错误，并保留附件引用', async () => {
+    const attachments = actions()
+    const message = '无法将附件复制到剪贴板。'
+    vi.mocked(attachments.copy).mockRejectedValue({ code: 'ASSET_CLIPBOARD_WRITE_FAILED', message })
+    const success = vi.spyOn(ElMessage, 'success').mockReturnValue({ close: vi.fn() })
+    const wrapper = editor(undefined, attachments)
+    await wrapper.get('.cm-attachment-preview').trigger('contextmenu')
+    const body = new DOMWrapper(document.body)
+    await vi.waitFor(() => expect(body.findAll('[role="menuitem"]')).toHaveLength(5))
+    await body
+      .findAll('[role="menuitem"]')
+      .find((item) => item.text() === '复制')
+      ?.trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('pasteError')).toEqual([[message]])
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    expect(success).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
@@ -148,7 +183,7 @@ describe('笔记附件', () => {
     wrapper.get<HTMLElement>('.cm-content').element.tabIndex = 0
     await wrapper.get('.cm-attachment-preview').trigger('contextmenu')
     const body = new DOMWrapper(document.body)
-    await vi.waitFor(() => expect(body.findAll('[role="menuitem"]')).toHaveLength(4))
+    await vi.waitFor(() => expect(body.findAll('[role="menuitem"]')).toHaveLength(5))
     expect(wrapper.find('.el-dropdown').exists()).toBe(false)
     const items = body.findAll('[role="menuitem"]')
     await vi.waitFor(() => expect(document.activeElement).toBe(items[0]?.element))
@@ -286,7 +321,7 @@ describe('笔记附件', () => {
     const second = `[乙](./${asset.relativePath})`
     const wrapper = editor(`${first} 和 ${second}`)
     await wrapper.findAll('.cm-attachment-preview')[0]?.trigger('contextmenu')
-    await vi.waitFor(() => expect(new DOMWrapper(document.body).findAll('[role="menuitem"]')).toHaveLength(4))
+    await vi.waitFor(() => expect(new DOMWrapper(document.body).findAll('[role="menuitem"]')).toHaveLength(5))
     await new DOMWrapper(document.body)
       .findAll('[role="menuitem"]')
       .find((item) => item.text() === '从笔记中移除')

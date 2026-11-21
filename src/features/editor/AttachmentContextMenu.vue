@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { Delete, Download, FolderOpened, TopRight } from '@element-plus/icons-vue'
+import { CopyDocument, Delete, Download, FolderOpened, TopRight } from '@element-plus/icons-vue'
 import { ElDropdownItem } from 'element-plus'
 import ContextMenu from '@/components/ContextMenu.vue'
 import { t } from '@/i18n'
+import type { AttachmentContextAction } from '@/types/assets'
 
-defineProps<{ x: number; y: number }>()
+defineProps<{ x: number; y: number; canCopy: boolean }>()
 const emit = defineEmits<{
   close: [restoreFocus?: boolean]
-  action: [action: 'open' | 'reveal' | 'saveAs' | 'remove']
+  action: [action: AttachmentContextAction]
 }>()
 </script>
 
@@ -17,6 +18,7 @@ const emit = defineEmits<{
     <ElDropdownItem :icon="FolderOpened" @click="emit('action', 'reveal')">{{
       t('在文件管理器中显示')
     }}</ElDropdownItem>
+    <ElDropdownItem v-if="canCopy" :icon="CopyDocument" @click="emit('action', 'copy')">{{ t('复制') }}</ElDropdownItem>
     <ElDropdownItem :icon="Download" @click="emit('action', 'saveAs')">{{ t('另存为') }}</ElDropdownItem>
     <ElDropdownItem class="context-menu-item--danger" :icon="Delete" @click="emit('action', 'remove')">
       {{ t('从笔记中移除') }}

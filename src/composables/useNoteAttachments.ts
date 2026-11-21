@@ -1,6 +1,7 @@
 import { onBeforeUnmount, onMounted, shallowRef, watch } from 'vue'
 import {
   chooseNoteAttachments,
+  copyNoteAsset,
   listNoteAssets,
   openNoteAsset,
   pasteNoteAttachments,
@@ -69,6 +70,7 @@ export function useNoteAttachments(noteId: () => string | undefined, onError: (m
     },
     open: (path) => openNoteAsset(currentId(), path),
     reveal: (path) => revealNoteAsset(currentId(), path),
+    copy: (path) => copyNoteAsset(currentId(), path),
     saveAs: (path) => saveNoteAssetAs(currentId(), path),
   }
 

@@ -1,4 +1,4 @@
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, WebviewWindow};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
@@ -126,6 +126,19 @@ pub async fn reveal_note_asset(
             .opener()
             .reveal_item_in_dir(path)
             .map_err(|_| AssetError::OpenFailed)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn copy_note_asset(
+    window: WebviewWindow,
+    note_id: String,
+    relative_path: String,
+) -> Result<(), AssetCommandError> {
+    run_blocking(window.app_handle().clone(), move |service| {
+        let path = service.validated_path(&note_id, &relative_path)?;
+        crate::services::file_clipboard::write_file(&window, &path)
     })
     .await
 }

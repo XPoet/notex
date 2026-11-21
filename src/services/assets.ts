@@ -20,6 +20,7 @@ const assetErrorCodes: AssetErrorCode[] = [
   'ASSET_OPEN_FAILED',
   'ASSET_EXPORT_FAILED',
   'ASSET_CLIPBOARD_FAILED',
+  'ASSET_CLIPBOARD_WRITE_FAILED',
 ]
 
 function isTauriErrorPayload(value: unknown): value is TauriErrorPayload {
@@ -65,6 +66,10 @@ export function openNoteAsset(noteId: string, relativePath: string): Promise<voi
 
 export function revealNoteAsset(noteId: string, relativePath: string): Promise<void> {
   return assetCommand('reveal_note_asset', { noteId, relativePath })
+}
+
+export function copyNoteAsset(noteId: string, relativePath: string): Promise<void> {
+  return assetCommand('copy_note_asset', { noteId, relativePath })
 }
 
 export function saveNoteAssetAs(noteId: string, relativePath: string): Promise<void> {

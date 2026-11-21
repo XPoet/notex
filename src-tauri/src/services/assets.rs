@@ -110,7 +110,29 @@ impl AssetsService {
             .and_then(|name| name.to_str())
             .ok_or(AssetError::UnsupportedFile)?;
         let bytes = read_bounded(&path)?;
-        self.save_attachment(note_id, name, &bytes)
+        let original_name = self.managed_original_name(&path)?;
+        self.save_attachment(note_id, original_name.as_deref().unwrap_or(name), &bytes)
+    }
+
+    fn managed_original_name(&self, source: &Path) -> Result<Option<String>, AssetError> {
+        let Some(relative) = self
+            .assets_directory
+            .canonicalize()
+            .ok()
+            .and_then(|root| source.strip_prefix(root).ok()?.to_str())
+        else {
+            return Ok(None);
+        };
+        let relative_path = format!(
+            "assets/{}",
+            relative.replace(std::path::MAIN_SEPARATOR, "/")
+        );
+        if !is_managed_path(&relative_path) {
+            return Ok(None);
+        }
+        let connection =
+            open_database(&self.database_path).map_err(|_| AssetError::StorageUnavailable)?;
+        AssetsRepository::original_name(&connection, &relative_path)
     }
 
     pub fn import_files(
@@ -954,8 +976,10 @@ mod tests {
         let other = NotesService::new(&root).create()?;
         let original = b"%PDF-1.7\noriginal\n%%EOF";
         let file = service.save_attachment(&note_id, "报告 [终稿].pdf", original)?;
-        let separate = service.save_attachment(&other.id, "报告 [终稿].pdf", original)?;
+        let source = service.validated_path(&note_id, &file.relative_path)?;
+        let separate = service.import_file(&other.id, &source)?;
         assert_eq!(file.original_name, "报告 [终稿].pdf");
+        assert_eq!(separate.original_name, file.original_name);
         assert_eq!(file.width, None);
         assert_ne!(file.id, separate.id);
         let edited = b"%PDF-1.7\nexternally edited document\n%%EOF";
@@ -963,7 +987,11 @@ mod tests {
         let refreshed = service.list(&note_id)?;
         assert_eq!(refreshed[0].size, edited.len() as i64);
         assert_eq!(std::fs::read(root.join(separate.relative_path))?, original);
-        assert!(service.linked_path(&other.id, &file.relative_path).is_err());
+        assert!(
+            service
+                .validated_path(&other.id, &file.relative_path)
+                .is_err()
+        );
         assert!(
             service
                 .save_attachment(&note_id, "伪装.pdf", b"executable")

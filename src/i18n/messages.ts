@@ -717,6 +717,7 @@ export const messages = {
   附件操作: ['Attachment actions', '附件操作'],
   用默认应用打开: ['Open with default app', '使用預設應用程式開啟'],
   在文件管理器中显示: ['Show in file manager', '在檔案管理器中顯示'],
+  复制: ['Copy', '複製'],
   另存为: ['Save as', '另存新檔'],
   从笔记中移除: ['Remove from note', '從筆記中移除'],
   添加附件: ['Add attachment', '新增附件'],
@@ -737,6 +738,8 @@ export const messages = {
     '無法使用預設應用程式開啟附件，請檢查檔案及預設應用程式設定。',
   ],
   '附件另存为失败。': ['Unable to save the attachment copy.', '附件另存新檔失敗。'],
+  '附件已复制到剪贴板。': ['Attachment copied to the clipboard.', '附件已複製到剪貼簿。'],
+  '无法将附件复制到剪贴板。': ['Unable to copy the attachment to the clipboard.', '無法將附件複製到剪貼簿。'],
   '无法读取剪贴板文件。': ['Unable to read clipboard files.', '無法讀取剪貼簿檔案。'],
   '文本、图片和附件都会保存在本机。': [
     'Text, images and attachments are saved locally.',

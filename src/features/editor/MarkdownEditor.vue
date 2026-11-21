@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { Compartment, EditorState } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
+import { ElMessage } from 'element-plus'
 import { nextTick, onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef, watch } from 'vue'
 import { transferFiles, useClipboardPaste } from './useClipboardPaste'
 import AttachmentContextMenu from './AttachmentContextMenu.vue'
 import { getNoteAssetReferences } from './assetReferences'
 import type { NoteAssetReference } from './assetReferences'
-import type { AttachmentHandlers, SavedAsset } from '@/types/assets'
+import type { AttachmentContextAction, AttachmentHandlers, SavedAsset } from '@/types/assets'
 import NoteImageViewer from './NoteImageViewer.vue'
 import { imagePreviews, refreshImagePreviews, replaceImageReferences } from './imagePreviews'
 import { EditHistory } from './editHistory'
@@ -192,9 +193,9 @@ function handleContextMenu(event: MouseEvent): boolean {
   return true
 }
 
-function handleContextAction(action: 'open' | 'reveal' | 'saveAs' | 'remove'): void {
+async function handleContextAction(action: AttachmentContextAction): Promise<void> {
   const reference = contextMenu.value?.reference
-  closeContextMenu(action === 'remove')
+  closeContextMenu(action === 'remove' || action === 'copy')
   const view = editorView.value
   if (reference === undefined || view === undefined) return
   if (action === 'remove') {
@@ -204,8 +205,15 @@ function handleContextAction(action: 'open' | 'reveal' | 'saveAs' | 'remove'): v
       selection: { anchor: reference.from },
     })
     history.breakGroup()
-  } else {
-    void props.attachments?.[action](reference.relativePath).catch(reportAssetError)
+    return
+  }
+  const attachments = props.attachments
+  if (attachments === undefined) return
+  try {
+    await attachments[action](reference.relativePath)
+    if (action === 'copy') ElMessage.success(t('附件已复制到剪贴板。'))
+  } catch (error: unknown) {
+    reportAssetError(error)
   }
 }
 
@@ -407,6 +415,7 @@ onBeforeUnmount(() => {
         :key="`${contextMenu.reference.from}:${contextMenu.x}:${contextMenu.y}`"
         :x="contextMenu.x"
         :y="contextMenu.y"
+        :can-copy="attachments !== undefined"
         @close="closeContextMenu"
         @action="handleContextAction"
       />

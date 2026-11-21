@@ -5,6 +5,20 @@ use crate::domain::assets::{AssetError, SavedAsset};
 pub struct AssetsRepository;
 
 impl AssetsRepository {
+    pub fn original_name(
+        connection: &Connection,
+        relative_path: &str,
+    ) -> Result<Option<String>, AssetError> {
+        connection
+            .query_row(
+                "SELECT COALESCE(original_name, file_name) FROM assets WHERE relative_path = ?1",
+                [relative_path],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|_| AssetError::ReadFailed)
+    }
+
     pub fn is_linked(
         connection: &Connection,
         note_id: &str,

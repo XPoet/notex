@@ -66,6 +66,7 @@ pub fn run() -> Result<(), tauri::Error> {
                 commands::assets::list_note_assets,
                 commands::assets::open_note_asset,
                 commands::assets::reveal_note_asset,
+                commands::assets::copy_note_asset,
                 commands::assets::save_note_asset_as,
                 commands::assets::get_note_asset_health,
                 commands::assets::read_note_image,

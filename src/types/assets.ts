@@ -20,8 +20,11 @@ export interface AttachmentHandlers {
   pasteFiles: () => Promise<string[] | undefined>
   open: (relativePath: string) => Promise<void>
   reveal: (relativePath: string) => Promise<void>
+  copy: (relativePath: string) => Promise<void>
   saveAs: (relativePath: string) => Promise<void>
 }
+
+export type AttachmentContextAction = 'open' | 'reveal' | 'copy' | 'saveAs' | 'remove'
 
 export interface AssetHealth {
   missingAssetCount: number
@@ -41,6 +44,7 @@ export type AssetErrorCode =
   | 'ASSET_OPEN_FAILED'
   | 'ASSET_EXPORT_FAILED'
   | 'ASSET_CLIPBOARD_FAILED'
+  | 'ASSET_CLIPBOARD_WRITE_FAILED'
 
 export interface AssetError {
   code: AssetErrorCode

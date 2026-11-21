@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { flushPromises } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { loadNoteImage, saveNoteAttachment } from '@/services/assets'
+import { copyNoteAsset, loadNoteImage, saveNoteAttachment } from '@/services/assets'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 const createObjectURL = vi.fn((_blob: Blob | MediaSource) => 'blob:preview')
@@ -28,6 +28,13 @@ describe('本地图片读取 Service', () => {
     Object.defineProperty(file, 'size', { value: 101 * 1024 * 1024 })
     await expect(saveNoteAttachment('note', file)).rejects.toMatchObject({ code: 'ASSET_FILE_TOO_LARGE' })
     expect(invoke).not.toHaveBeenCalled()
+  })
+
+  it('按笔记 ID 和资源相对路径复制附件，保留剪贴板错误', async () => {
+    const failure = { code: 'ASSET_CLIPBOARD_WRITE_FAILED', message: '无法将附件复制到剪贴板。' }
+    vi.mocked(invoke).mockRejectedValue(failure)
+    await expect(copyNoteAsset('note', 'assets/note/file.pdf')).rejects.toEqual(failure)
+    expect(invoke).toHaveBeenCalledWith('copy_note_asset', { noteId: 'note', relativePath: 'assets/note/file.pdf' })
   })
 
   it.each(['ArrayBuffer', 'macOS 数字数组'])('将 %s 响应保留为原始图片字节', async (transport) => {

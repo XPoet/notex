@@ -156,9 +156,9 @@ Security Service 在会话锁与数据库写锁内重新读取密码配置，验
 
 ### `choose_note_attachments` / `paste_note_attachments`
 
-请求：`{ noteId: string }`。前者由 Rust 打开多选文件对话框；后者读取 macOS 原生文件 URL 剪贴板，仅接受文件 URL，不把普通文本路径当作文件。二者均在 Rust 读取文件后保存笔记副本，不把源绝对路径返回前端。一次最多 100 个文件。
+两者均接收 `{ noteId: string }`。前者由 Rust 打开多选文件对话框。后者读取 macOS 的文件 URL 或 Windows 的 `CF_HDROP` 文件列表。两者均由 Rust 保存文件副本，响应仅包含附件元数据和失败文件名。一次最多处理 100 个文件。
 
-响应：`AttachmentBatch { assets: SavedAsset[], failedNames: string[] }`。取消对话框或剪贴板没有文件返回空数组；部分失败返回成功附件与失败文件名，前端继续插入成功项。其他桌面平台可通过选择文件、拖入和 WebView 提供的 File 数据添加附件；原生文件 URL 剪贴板桥接当前面向 macOS。
+响应类型为 `AttachmentBatch { assets: SavedAsset[], failedNames: string[] }`。取消对话框或剪贴板没有文件时返回空数组。部分失败时前端继续插入成功项。其他桌面平台可通过选择文件、拖入和 WebView 提供的 File 数据添加附件。
 
 ### `SavedAsset`
 
@@ -184,13 +184,17 @@ Security Service 在会话锁与数据库写锁内重新读取密码配置，验
 
 “从笔记中移除”通过编辑器正文事务移除当前那一处引用，支持撤销；不发起物理文件删除。资源随笔记永久删除清理。
 
+### `copy_note_asset`
+
+接收 `{ noteId: string, relativePath: string }`，成功时返回空值。Rust 验证资源关联、路径与文件内容后，将原文件以系统文件格式写入剪贴板。macOS 写入文件 URL，Windows 写入 `CF_HDROP`。粘贴到 NoteX 时会保存独立副本，并从资源记录还原原始显示名称。粘贴到文件管理器时使用磁盘上的文件名。
+
 ### `read_note_image`
 
 请求：`{ noteId: string, relativePath: string, thumbnail?: boolean }`。支持笔记独立目录和旧版单层图片路径，验证数据库关联与受控路径，拒绝符号链接和越界路径。`thumbnail = true` 输出最长边不超过 1280 的 PNG 缩略图；默认返回原始图片字节，原图预览预算为 24 MiB。继续使用 `tauri::ipc::Response`：macOS postMessage 可能返回数字数组，前端 Service 转换成 `Uint8Array` 后创建 Blob。缩略图按可见区域优先、总并发不超过 2、24 MiB 缓存预算调度。
 
 ### 资源错误码
 
-`ASSET_NOTE_NOT_FOUND` ｜ `INVALID_IMAGE_DATA` ｜ `UNSUPPORTED_IMAGE_FORMAT` ｜ `IMAGE_DIMENSIONS_INVALID` ｜ `ASSET_STORAGE_UNAVAILABLE` ｜ `ASSET_WRITE_FAILED` ｜ `ASSET_SAVE_FAILED` ｜ `ASSET_READ_FAILED` ｜ `ASSET_UNSUPPORTED_FILE` ｜ `ASSET_FILE_TOO_LARGE` ｜ `ASSET_OPEN_FAILED` ｜ `ASSET_EXPORT_FAILED` ｜ `ASSET_CLIPBOARD_FAILED`
+`ASSET_NOTE_NOT_FOUND` ｜ `INVALID_IMAGE_DATA` ｜ `UNSUPPORTED_IMAGE_FORMAT` ｜ `IMAGE_DIMENSIONS_INVALID` ｜ `ASSET_STORAGE_UNAVAILABLE` ｜ `ASSET_WRITE_FAILED` ｜ `ASSET_SAVE_FAILED` ｜ `ASSET_READ_FAILED` ｜ `ASSET_UNSUPPORTED_FILE` ｜ `ASSET_FILE_TOO_LARGE` ｜ `ASSET_OPEN_FAILED` ｜ `ASSET_EXPORT_FAILED` ｜ `ASSET_CLIPBOARD_FAILED` ｜ `ASSET_CLIPBOARD_WRITE_FAILED`
 
 ## 6. 回收站接口
 

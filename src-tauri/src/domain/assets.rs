@@ -53,9 +53,11 @@ pub enum AssetError {
     OpenFailed,
     #[error("附件另存为失败。")]
     ExportFailed,
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     #[error("无法读取剪贴板文件。")]
     ClipboardFailed,
+    #[error("无法将附件复制到剪贴板。")]
+    ClipboardWriteFailed,
 }
 
 #[derive(Debug, Serialize)]
@@ -95,8 +97,11 @@ impl From<AssetError> for AssetCommandError {
                 "无法使用默认应用打开附件，请检查文件和默认应用设置。",
             ),
             AssetError::ExportFailed => ("ASSET_EXPORT_FAILED", "附件另存为失败。"),
-            #[cfg(target_os = "macos")]
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
             AssetError::ClipboardFailed => ("ASSET_CLIPBOARD_FAILED", "无法读取剪贴板文件。"),
+            AssetError::ClipboardWriteFailed => {
+                ("ASSET_CLIPBOARD_WRITE_FAILED", "无法将附件复制到剪贴板。")
+            }
         };
         Self { code, message }
     }

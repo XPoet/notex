@@ -1,16 +1,24 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::domain::assets::AssetError;
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+const MAX_CLIPBOARD_FILES: usize = 100;
 
 pub(crate) fn files() -> Result<Vec<PathBuf>, AssetError> {
     platform::files()
 }
 
+pub(crate) fn write_file(window: &tauri::WebviewWindow, path: &Path) -> Result<(), AssetError> {
+    platform::write_file(window, path)
+}
+
 #[cfg(target_os = "macos")]
 mod platform {
-    use std::ffi::{CStr, c_char, c_void};
-    use std::path::PathBuf;
+    use std::ffi::{CStr, CString, c_char, c_void};
+    use std::path::{Path, PathBuf};
 
+    use super::MAX_CLIPBOARD_FILES;
     use crate::domain::assets::AssetError;
 
     type Object = *mut c_void;
@@ -53,6 +61,62 @@ mod platform {
         }
     }
 
+    pub(super) fn write_file(
+        _window: &tauri::WebviewWindow,
+        path: &Path,
+    ) -> Result<(), AssetError> {
+        // SAFETY: all Objective-C objects remain within this thread's pool.
+        unsafe {
+            let _pool = Pool(objc_autoreleasePoolPush());
+            let board = send(
+                objc_getClass(c"NSPasteboard".as_ptr()),
+                c"generalPasteboard",
+            );
+            write_file_to(board, path)
+        }
+    }
+
+    unsafe fn write_file_to(board: Object, path: &Path) -> Result<(), AssetError> {
+        if board.is_null() {
+            return Err(AssetError::ClipboardWriteFailed);
+        }
+        let path = CString::new(path.as_os_str().as_encoded_bytes())
+            .map_err(|_| AssetError::ClipboardWriteFailed)?;
+        // SAFETY: board is a live NSPasteboard, path is a NUL-terminated file-system path,
+        // and each message sender matches the selected AppKit/Foundation method's ABI.
+        unsafe {
+            let file_url: unsafe extern "C" fn(
+                Object,
+                Object,
+                *const c_char,
+                i8,
+                Object,
+            ) -> Object = std::mem::transmute(objc_msgSend as *const ());
+            let url = file_url(
+                objc_getClass(c"NSURL".as_ptr()),
+                sel_registerName(
+                    c"fileURLWithFileSystemRepresentation:isDirectory:relativeToURL:".as_ptr(),
+                ),
+                path.as_ptr(),
+                0,
+                std::ptr::null_mut(),
+            );
+            if url.is_null() {
+                return Err(AssetError::ClipboardWriteFailed);
+            }
+            let list = send_arg(objc_getClass(c"NSArray".as_ptr()), c"arrayWithObject:", url);
+            let clear: unsafe extern "C" fn(Object, Object) -> isize =
+                std::mem::transmute(objc_msgSend as *const ());
+            let write: unsafe extern "C" fn(Object, Object, Object) -> i8 =
+                std::mem::transmute(objc_msgSend as *const ());
+            clear(board, sel_registerName(c"clearContents".as_ptr()));
+            if write(board, sel_registerName(c"writeObjects:".as_ptr()), list) == 0 {
+                return Err(AssetError::ClipboardWriteFailed);
+            }
+        }
+        Ok(())
+    }
+
     unsafe fn read_files(board: Object) -> Result<Vec<PathBuf>, AssetError> {
         // SAFETY: board is a live NSPasteboard. NSURL restricts reading to URLs,
         // and the reading option excludes non-file URLs and plain text paths.
@@ -85,7 +149,7 @@ mod platform {
             let count_send: unsafe extern "C" fn(Object, Object) -> usize =
                 std::mem::transmute(objc_msgSend as *const ());
             let count = count_send(urls, sel_registerName(c"count".as_ptr()));
-            if count > 100 {
+            if count > MAX_CLIPBOARD_FILES {
                 return Err(AssetError::ClipboardFailed);
             }
             let indexed: unsafe extern "C" fn(Object, Object, usize) -> Object =
@@ -139,7 +203,7 @@ mod platform {
         use super::*;
 
         #[test]
-        fn reads_file_urls_from_an_isolated_pasteboard_without_touching_the_users_clipboard()
+        fn copies_file_urls_via_an_isolated_pasteboard_without_touching_the_users_clipboard()
         -> Result<(), Box<dyn std::error::Error>> {
             // SAFETY: test objects live until the local pool drops, and each typed
             // function pointer matches the invoked Foundation/AppKit selector.
@@ -150,24 +214,8 @@ mod platform {
                     c"pasteboardWithUniqueName",
                 );
                 assert!(!board.is_null(), "macOS 未返回隔离剪贴板");
-                let clear: unsafe extern "C" fn(Object, Object) -> isize =
-                    std::mem::transmute(objc_msgSend as *const ());
-                clear(board, sel_registerName(c"clearContents".as_ptr()));
-                let path = std::env::temp_dir().join("NoteX 附件 [验收].pdf");
-                let encoded = std::ffi::CString::new(path.as_os_str().as_encoded_bytes())?;
-                let name = send_arg(
-                    objc_getClass(c"NSString".as_ptr()),
-                    c"stringWithUTF8String:",
-                    encoded.as_ptr().cast_mut().cast(),
-                );
-                let url = send_arg(objc_getClass(c"NSURL".as_ptr()), c"fileURLWithPath:", name);
-                let list = send_arg(objc_getClass(c"NSArray".as_ptr()), c"arrayWithObject:", url);
-                let write: unsafe extern "C" fn(Object, Object, Object) -> i8 =
-                    std::mem::transmute(objc_msgSend as *const ());
-                assert_ne!(
-                    write(board, sel_registerName(c"writeObjects:".as_ptr()), list),
-                    0
-                );
+                let path = std::env::temp_dir().join("NoteX 附件 # [验收].pdf");
+                write_file_to(board, &path)?;
                 assert_eq!(read_files(board)?, [path]);
             }
             Ok(())
@@ -175,12 +223,24 @@ mod platform {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+mod windows;
+#[cfg(target_os = "windows")]
+use windows as platform;
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 mod platform {
     use crate::domain::assets::AssetError;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     pub(super) fn files() -> Result<Vec<PathBuf>, AssetError> {
         Ok(Vec::new())
+    }
+
+    pub(super) fn write_file(
+        _window: &tauri::WebviewWindow,
+        _path: &Path,
+    ) -> Result<(), AssetError> {
+        Err(AssetError::ClipboardWriteFailed)
     }
 }
